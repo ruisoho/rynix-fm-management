@@ -5,6 +5,7 @@ const fs = require('fs');
 const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcrypt');
 const multer = require('multer');
+const PerformanceOptimizer = require('./services/performanceOptimizer');
 require('dotenv').config();
 
 // Configure multer for file uploads
@@ -29,6 +30,7 @@ const PORT = process.env.PORT || 3001;
 const dbPath = path.join(__dirname, '..', 'app.db');
 const schemaPath = path.join(__dirname, '..', 'database', 'schema.sql');
 let db;
+let performanceOptimizer;
 
 // Database migrations
 function runMigrations() {
@@ -95,9 +97,17 @@ function initializeDatabase() {
             const executeStatement = (index) => {
               if (index >= statements.length) {
                 console.log('Database initialized successfully.');
-                // Enable WAL mode for better performance
-                db.run('PRAGMA journal_mode = WAL', (err) => {
-                  if (err) {
+            // Initialize performance optimizer
+            performanceOptimizer = new PerformanceOptimizer(db);
+            performanceOptimizer.initialize().then(() => {
+              console.log('🚀 Performance optimizations applied');
+            }).catch(err => {
+              console.error('Performance optimizer initialization failed:', err);
+            });
+            
+            // Enable WAL mode for better performance
+            db.run('PRAGMA journal_mode = WAL', (err) => {
+              if (err) {
                     console.error('WAL mode error:', err);
                   }
                   resolve();
@@ -125,6 +135,14 @@ function initializeDatabase() {
           } else {
             // Run database migrations for existing databases
             runMigrations().then(() => {
+              // Initialize performance optimizer for existing database
+              performanceOptimizer = new PerformanceOptimizer(db);
+              performanceOptimizer.initialize().then(() => {
+                console.log('🚀 Performance optimizations applied');
+              }).catch(err => {
+                console.error('Performance optimizer initialization failed:', err);
+              });
+              
               // Enable WAL mode for better performance
               db.run('PRAGMA journal_mode = WAL', (err) => {
                 if (err) {
@@ -983,24 +1001,46 @@ app.delete('/api/tasks/:id', (req, res) => {
 // Heating systems endpoints
 app.get('/api/heating', (req, res) => {
   try {
-    // Only get heating meters from electric_meters table to avoid duplicates
-    // The old heating_systems entries are legacy and should not be displayed
+    // Get heating meters from electric_meters table
     const heatingMetersQuery = `
-      SELECT em.*, f.name as facility_name 
+      SELECT em.*, f.name as facility_name, 'electric_meters' as source_table
       FROM electric_meters em 
       JOIN facilities f ON em.facility_id = f.id 
       WHERE em.type = 'heating'
       ORDER BY f.name, em.serial_number
     `;
     
+    // Get heating systems from heating_systems table
+    const heatingSystemsQuery = `
+      SELECT hs.id, hs.facility_id, hs.manufacturer as serial_number, hs.type, 
+             hs.notes as location, hs.installation_date, hs.status, 
+             hs.created_at, hs.updated_at, f.name as facility_name, 'heating_systems' as source_table
+      FROM heating_systems hs 
+      JOIN facilities f ON hs.facility_id = f.id 
+      ORDER BY f.name, hs.manufacturer
+    `;
+    
+    // Execute both queries and combine results
     db.all(heatingMetersQuery, (err, heatingMeters) => {
       if (err) {
         console.error('Get heating meters error:', err);
         return res.status(500).json({ error: 'Failed to fetch heating meters' });
       }
       
-      console.log('Heating meters fetched:', heatingMeters.length, 'records');
-      res.json(heatingMeters);
+      db.all(heatingSystemsQuery, (err, heatingSystems) => {
+        if (err) {
+          console.error('Get heating systems error:', err);
+          return res.status(500).json({ error: 'Failed to fetch heating systems' });
+        }
+        
+        // Combine both arrays
+        const allHeatingData = [...heatingMeters, ...heatingSystems];
+        console.log('Total heating data fetched:', allHeatingData.length, 'records');
+        console.log('- From electric_meters:', heatingMeters.length);
+        console.log('- From heating_systems:', heatingSystems.length);
+        
+        res.json(allHeatingData);
+      });
     });
   } catch (error) {
     console.error('Get heating systems error:', error);
@@ -1787,147 +1827,64 @@ app.post('/api/meters/upload-csv', upload.single('csvFile'), (req, res) => {
 });
 
 // Energy consumption data endpoint for charts
-app.get('/api/energy-consumption', (req, res) => {
+// Optimized energy consumption endpoint with caching
+app.get('/api/energy-consumption', async (req, res) => {
   const { period = 'monthly' } = req.query;
   
-  // Define date grouping based on period
-  let dateFormat, dateGroup;
-  switch (period) {
-    case 'daily':
-      dateFormat = '%Y-%m-%d';
-      dateGroup = "strftime('%Y-%m-%d', date)";
-      break;
-    case 'weekly':
-      dateFormat = '%Y-W%W';
-      dateGroup = "strftime('%Y-W%W', date)";
-      break;
-    case 'monthly':
-      dateFormat = '%Y-%m';
-      dateGroup = "strftime('%Y-%m', date)";
-      break;
-    case 'yearly':
-      dateFormat = '%Y';
-      dateGroup = "strftime('%Y', date)";
-      break;
-    default:
-      dateFormat = '%Y-%m';
-      dateGroup = "strftime('%Y-%m', date)";
-  }
-  
-  // Query for consumption calculation (simple method: max - min per meter)
-  // Excludes problematic meters that cause discrepancy from expected total
-  // For heating, correlate with gas consumption using a conversion factor
-  const meterQuery = `
-    WITH meter_consumption AS (
-      SELECT 
-        ${dateGroup} as period,
-        em.type,
-        em.id as meter_id,
-        CASE 
-          WHEN em.type = 'heating' THEN 0  -- Will be calculated from gas
-          ELSE MAX(mr.value) - MIN(mr.value)
-        END as meter_consumption
-      FROM meter_readings mr
-      JOIN electric_meters em ON mr.meter_id = em.id
-      WHERE em.type IN ('electric', 'gas', 'heating')
-        AND NOT (em.type = 'electric' AND em.location IN (
-          'Ground Floor Left', '1.OG Rechts', 'Hausanlage', '3.OG Links', 
-          '5.OG Rechts', '7.OG', '4.OG Links', '4.OG Rechts', 'Lastaufzug'
-        ))
-      GROUP BY ${dateGroup}, em.type, em.id
-    ),
-    gas_heating_correlation AS (
-      SELECT 
-        period,
-        type,
-        CASE 
-          WHEN type = 'heating' THEN (
-            SELECT SUM(meter_consumption) * 0.75  -- 75% correlation factor
-            FROM meter_consumption gc 
-            WHERE gc.period = meter_consumption.period AND gc.type = 'gas'
-          )
-          ELSE SUM(meter_consumption)
-        END as total_consumption
-      FROM meter_consumption
-      GROUP BY period, type
-    )
-    SELECT 
-      period,
-      type,
-      total_consumption
-    FROM gas_heating_correlation
-    ORDER BY period
-  `;
-  
-  // Query for legacy heating consumption calculation (fallback)
-  const legacyHeatingQuery = `
-    WITH heating_consumption AS (
-      SELECT 
-        ${dateGroup} as period,
-        'heating' as type,
-        hs.id as system_id,
-        MAX(hr.value) - MIN(hr.value) as system_consumption
-      FROM heating_readings hr
-      JOIN heating_systems hs ON hr.heating_id = hs.id
-      GROUP BY ${dateGroup}, hs.id
-    )
-    SELECT 
-      period,
-      type,
-      SUM(system_consumption) as total_consumption
-    FROM heating_consumption
-    GROUP BY period
-    ORDER BY period
-  `;
-  
-  // Execute both queries
-  db.all(meterQuery, (err, meterData) => {
-    if (err) {
-      console.error('Get meter consumption error:', err);
-      return res.status(500).json({ error: 'Failed to fetch meter consumption data' });
+  try {
+    if (!performanceOptimizer) {
+      // Fallback to original query if optimizer not initialized
+      return res.status(503).json({ error: 'Performance optimizer not ready' });
     }
     
-    db.all(legacyHeatingQuery, (err, legacyHeatingData) => {
-      if (err) {
-        console.error('Get legacy heating consumption error:', err);
-        return res.status(500).json({ error: 'Failed to fetch legacy heating consumption data' });
-      }
-      
-      // Combine and format data (legacy heating data is fallback for old systems)
-      const combinedData = [...meterData, ...legacyHeatingData];
-      const groupedData = {};
-      
-      // Group by period
-      combinedData.forEach(row => {
-        if (!groupedData[row.period]) {
-          groupedData[row.period] = {
-            name: formatPeriodName(row.period, period),
-            electricity: 0,
-            gas: 0,
-            heating: 0
-          };
-        }
-        
-        if (row.type === 'electric') {
-          groupedData[row.period].electricity = row.total_consumption;
-        } else if (row.type === 'gas') {
-          groupedData[row.period].gas = row.total_consumption;
-        } else if (row.type === 'heating') {
-          groupedData[row.period].heating = row.total_consumption;
-        }
-      });
-      
-      // Convert to array and sort chronologically by period
-      const result = Object.keys(groupedData)
-        .sort((a, b) => {
-          // Sort by the original period value (YYYY-MM format) for chronological order
-          return a.localeCompare(b);
-        })
-        .map(period => groupedData[period]);
-      
-      res.json(result);
+    const result = await performanceOptimizer.getOptimizedEnergyConsumption(period);
+    res.json(result);
+  } catch (error) {
+    console.error('Optimized energy consumption error:', error);
+    res.status(500).json({ error: 'Failed to fetch energy consumption data' });
+  }
+});
+
+// Performance monitoring and maintenance endpoints
+app.get('/api/performance/stats', (req, res) => {
+  if (!performanceOptimizer) {
+    return res.status(503).json({ error: 'Performance optimizer not ready' });
+  }
+  
+  const stats = performanceOptimizer.getPerformanceStats();
+  res.json(stats || { message: 'No performance data available yet' });
+});
+
+app.post('/api/performance/archive', async (req, res) => {
+  if (!performanceOptimizer) {
+    return res.status(503).json({ error: 'Performance optimizer not ready' });
+  }
+  
+  try {
+    const { monthsToKeep = 12 } = req.body;
+    const result = await performanceOptimizer.archiveOldReadings(monthsToKeep);
+    res.json({
+      message: 'Archiving completed successfully',
+      ...result
     });
-  });
+  } catch (error) {
+    console.error('Archive operation failed:', error);
+    res.status(500).json({ error: 'Failed to archive old readings' });
+  }
+});
+
+app.post('/api/performance/maintenance', async (req, res) => {
+  if (!performanceOptimizer) {
+    return res.status(503).json({ error: 'Performance optimizer not ready' });
+  }
+  
+  try {
+    await performanceOptimizer.runMaintenance();
+    res.json({ message: 'Maintenance tasks completed successfully' });
+  } catch (error) {
+    console.error('Maintenance tasks failed:', error);
+    res.status(500).json({ error: 'Failed to run maintenance tasks' });
+  }
 });
 
 // Helper function to format period names

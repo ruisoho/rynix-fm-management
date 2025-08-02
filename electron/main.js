@@ -80,34 +80,116 @@ function initializeDatabase() {
 
 // Create main window
 function createWindow() {
+  console.log('Creating BrowserWindow...');
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     minWidth: 800,
     minHeight: 600,
     webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
+      nodeIntegration: true,
+      contextIsolation: false,
       enableRemoteModule: false,
-      preload: path.join(__dirname, 'preload.js')
+      webSecurity: false,
+      allowRunningInsecureContent: true,
+      experimentalFeatures: true
     },
-    icon: path.join(__dirname, '..', 'frontend', 'public', 'icon.png'),
-    show: false,
-    titleBarStyle: 'default'
+    show: true,
+    titleBarStyle: 'default',
+    center: true
+  });
+  console.log('BrowserWindow created successfully.');
+
+  // Add comprehensive event logging
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    console.log('Content failed to load:', errorDescription, 'URL:', validatedURL);
   });
 
+  mainWindow.webContents.on('did-finish-load', () => {
+    console.log('Content loaded successfully');
+  });
+
+  mainWindow.webContents.on('dom-ready', () => {
+    console.log('DOM is ready');
+  });
+
+  mainWindow.webContents.on('did-start-loading', () => {
+    console.log('Started loading content');
+  });
+
+  mainWindow.webContents.on('did-stop-loading', () => {
+    console.log('Stopped loading content');
+  });
+
+  mainWindow.on('show', () => {
+    console.log('Window is now visible');
+  });
+
+  mainWindow.on('focus', () => {
+    console.log('Window gained focus');
+  });
+
+  // Log console messages from the renderer process
+  mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
+    console.log(`Renderer Console [${level}]:`, message);
+    if (line) console.log(`  at line ${line} in ${sourceId}`);
+  });
+
+  // Add crash and unresponsive handlers
+  mainWindow.webContents.on('crashed', (event, killed) => {
+    console.log('Renderer process crashed:', killed);
+  });
+
+  mainWindow.on('unresponsive', () => {
+    console.log('Window became unresponsive');
+  });
+
+  mainWindow.on('responsive', () => {
+    console.log('Window became responsive again');
+  });
+
+  // Ensure window is visible
+  console.log('Showing window immediately');
+  mainWindow.show();
+  
   // Load the app
   if (isDev) {
-    mainWindow.loadURL('http://localhost:3000');
+    console.log('Development mode: Loading React dev server');
+    
+    mainWindow.loadURL('http://localhost:3000').then(() => {
+      console.log('React dev server loaded successfully!');
+    }).catch((error) => {
+      console.error('Failed to load React dev server:', error);
+    });
+    
+    // Open dev tools to see console
     mainWindow.webContents.openDevTools();
   } else {
-    mainWindow.loadFile(path.join(__dirname, '..', 'frontend', 'build', 'index.html'));
+    console.log('Production mode: Loading from file');
+    mainWindow.loadFile(path.join(__dirname, '../build/index.html'));
   }
 
   // Show window when ready
   mainWindow.once('ready-to-show', () => {
+    console.log('Window ready to show, displaying...');
     mainWindow.show();
   });
+
+  // Force show window after timeout if ready-to-show doesn't fire
+  setTimeout(() => {
+    if (mainWindow && !mainWindow.isVisible()) {
+      console.log('Forcing window to show after timeout');
+      mainWindow.show();
+    }
+  }, 10000);
+
+  // Temporarily disabled force reload to debug loading issues
+  // setTimeout(() => {
+  //   if (mainWindow) {
+  //     console.log('Forcing content reload after timeout');
+  //     mainWindow.reload();
+  //   }
+  // }, 15000);
 
   // Handle window closed
   mainWindow.on('closed', () => {
@@ -230,6 +312,7 @@ function createMenu() {
 // App event handlers
 app.whenReady().then(async () => {
   try {
+    console.log('App is ready, initializing...');
     // Initialize database first
     const dbInitialized = await initializeDatabase();
     if (!dbInitialized) {
@@ -238,8 +321,11 @@ app.whenReady().then(async () => {
       return;
     }
 
+    console.log('Creating window...');
     createWindow();
+    console.log('Creating menu...');
     createMenu();
+    console.log('App initialization complete.');
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {

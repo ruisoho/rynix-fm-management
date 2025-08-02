@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { Bars3Icon, XMarkIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon } from '@heroicons/react/24/outline';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import Dashboard from './pages/Dashboard';
@@ -25,18 +25,30 @@ function App() {
   useEffect(() => {
     const checkApiHealth = async () => {
       try {
+        console.log('Checking API health...');
         const response = await fetch('/api/health');
+        console.log('API health response:', response.status, response.ok);
         if (!response.ok) {
           throw new Error('API not available');
         }
+        console.log('API health check passed');
         setIsLoading(false);
       } catch (err) {
+        console.error('API health check failed:', err);
         setError('Unable to connect to the application backend. Please ensure the server is running.');
         setIsLoading(false);
       }
     };
 
+    // Add timeout to prevent infinite loading
+    const timeout = setTimeout(() => {
+      console.log('API health check timeout - proceeding anyway');
+      setIsLoading(false);
+    }, 10000);
+
     checkApiHealth();
+    
+    return () => clearTimeout(timeout);
   }, []);
 
   if (isLoading) {
