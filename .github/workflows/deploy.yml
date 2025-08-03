@@ -2,9 +2,9 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [ develop/v1.1, main ]
+    branches: [ main ]
   pull_request:
-    branches: [ develop/v1.1 ]
+    branches: [ main ]
 
 permissions:
   contents: read
@@ -41,15 +41,15 @@ jobs:
         
     - name: Setup Pages
       uses: actions/configure-pages@v3
-      if: github.ref == 'refs/heads/develop/v1.1'
+      if: github.ref == 'refs/heads/main'
       
     - name: Upload artifact
       uses: actions/upload-pages-artifact@v2
-      if: github.ref == 'refs/heads/develop/v1.1'
+      if: github.ref == 'refs/heads/main'
       with:
         path: ./frontend/build
         
     - name: Deploy to GitHub Pages
       id: deployment
       uses: actions/deploy-pages@v2
-      if: github.ref == 'refs/heads/develop/v1.1'
+      if: github.ref == 'refs/heads/main'
