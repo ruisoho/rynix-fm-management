@@ -31,7 +31,7 @@
 
 #### Technical Architecture
 - **Offline-first Design** - Local SQLite database
-- **Cross-platform Support** - Electron desktop application
+- **Cross-platform Support** - Web-based application accessible from any browser
 - **API-driven Backend** - Express.js with comprehensive endpoints
 - **Component-based Frontend** - React 18 with modern hooks
 
@@ -86,7 +86,7 @@
 - bcrypt for authentication
 
 #### Desktop Framework
-- Electron 25+
+- Modern web browser (Chrome, Firefox, Safari, Edge)
 - Cross-platform compatibility
 - Native OS integration
 

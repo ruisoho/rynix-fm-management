@@ -360,7 +360,7 @@ const Settings = () => {
                       Platform
                     </dt>
                     <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
-                      Electron Desktop App
+                      Web Application
                     </dd>
                   </div>
                   <div>
@@ -454,7 +454,7 @@ const Settings = () => {
                       Browser Engine
                     </dt>
                     <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
-                      Chromium (Electron)
+                      Web Browser
                     </dd>
                   </div>
                   <div>

@@ -2,7 +2,7 @@
 
 ## 🎯 **Current Status Overview**
 - **Application Type**: Offline-first facility management desktop app
-- **Technology Stack**: React + Node.js + SQLite + Electron
+- **Technology Stack**: React + Node.js + SQLite (Web-based)
 - **Database Records**: 2,015+ meter readings, 2 facilities, 23 electric meters
 - **Key Achievement**: Successfully implemented gas-heating correlation and chronological data sorting
 

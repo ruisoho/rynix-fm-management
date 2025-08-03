@@ -1,6 +1,6 @@
 # Rynix FM Management - Version 1.0
 
-A comprehensive offline-first facility management desktop application built with Electron, React, Node.js, and SQLite.
+A comprehensive web-based facility management application built with React, Node.js, and SQLite.
 
 ## Version 1.0 Release Notes
 
@@ -37,7 +37,7 @@ A comprehensive offline-first facility management desktop application built with
 
 - **Frontend**: React 18, Tailwind CSS, React Router, Heroicons
 - **Backend**: Node.js, Express, better-sqlite3
-- **Desktop**: Electron, electron-builder
+- **Web Application**: Modern web standards, responsive design
 - **Database**: SQLite (local file-based)
 - **Authentication**: bcrypt (local password hashing)
 - **Testing**: Jest, React Testing Library, Supertest
@@ -62,9 +62,7 @@ facility-manager/
 │   │   └── index.css          # Tailwind CSS styles
 │   ├── package.json           # Frontend dependencies
 │   └── tailwind.config.js     # Tailwind configuration
-├── electron/
-│   ├── main.js                # Electron main process
-│   └── preload.js             # Electron preload script
+
 ├── database/
 │   └── schema.sql             # Database schema
 ├── package.json               # Main package.json
@@ -107,11 +105,9 @@ facility-manager/
    npm run frontend   # Starts React dev server on port 3000
    ```
 
-5. **Run Electron app**:
-   ```bash
-   # In a new terminal, after both servers are running
-   npm run electron-dev
-   ```
+5. **Access the web application**:
+
+   Open your browser and navigate to `http://localhost:3000`
 
 ### Database Initialization
 
@@ -258,10 +254,10 @@ cd frontend && npm test
 - Check browser console for errors
 - Verify all dependencies are installed
 
-**Electron app not starting**:
-- Make sure both backend and frontend servers are running
-- Check Electron console for errors
-- Verify `electron/main.js` configuration
+**Web application not loading**:
+- Check if both backend and frontend servers are running
+- Verify browser console for errors
+- Ensure you're accessing the correct URL (http://localhost:3000)
 
 **Build failures**:
 - Clear node_modules and reinstall dependencies

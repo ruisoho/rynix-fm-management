@@ -56,7 +56,7 @@ git push origin --tags
 ### Core Application Files
 - **Frontend**: Complete React application with modern UI
 - **Backend**: Node.js/Express API with SQLite database
-- **Electron**: Cross-platform desktop application setup
+- **Web Application**: Modern responsive web application
 - **Database**: Schema and sample data (app.db excluded via .gitignore)
 
 ### Documentation
@@ -68,7 +68,7 @@ git push origin --tags
 ### Configuration Files
 - **.gitignore**: Properly configured to exclude sensitive/build files
 - **package.json**: Updated with Rynix branding and v1.0.0
-- **Various config files**: Tailwind, PostCSS, Electron build configs
+- **Various config files**: Tailwind, PostCSS, web application configs
 
 ---
 
@@ -84,7 +84,7 @@ git push origin --tags
 - Gas-heating correlation system (75% automatic calculation)
 - Professional React UI with dark/light themes
 - Offline-first SQLite database architecture
-- Cross-platform Electron desktop application
+- Cross-platform web application accessible from any browser
 - 2,015+ meter readings across 23 electric meters
 - 2 facilities with comprehensive tracking
 
