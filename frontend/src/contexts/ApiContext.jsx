@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import axios from 'axios';
+import { DemoApiService } from '../services/demoData';
 
 const ApiContext = createContext();
 
@@ -10,6 +11,9 @@ export const useApi = () => {
   }
   return context;
 };
+
+// Check if we're in demo mode
+const isDemoMode = process.env.REACT_APP_DEMO_MODE === 'true' || process.env.NODE_ENV === 'production';
 
 // Configure axios defaults
 axios.defaults.baseURL = process.env.REACT_APP_API_URL || '';
@@ -82,11 +86,17 @@ export const ApiProvider = ({ children }) => {
 
   // Dashboard API
   const getDashboardData = useCallback(() => {
+    if (isDemoMode) {
+      return handleApiCall(() => DemoApiService.getDashboard());
+    }
     return handleApiCall(() => axios.get('/api/dashboard').then(res => res.data));
   }, [handleApiCall]);
 
   // Facilities API
   const getFacilities = useCallback(() => {
+    if (isDemoMode) {
+      return handleApiCall(() => DemoApiService.getFacilities());
+    }
     return handleApiCall(() => axios.get('/api/facilities').then(res => res.data));
   }, [handleApiCall]);
 
@@ -180,6 +190,9 @@ export const ApiProvider = ({ children }) => {
 
   // Heating API
   const getHeating = useCallback(() => {
+    if (isDemoMode) {
+      return handleApiCall(() => DemoApiService.getHeating());
+    }
     return handleApiCall(() => axios.get('/api/heating').then(res => res.data));
   }, [handleApiCall]);
 
@@ -205,6 +218,9 @@ export const ApiProvider = ({ children }) => {
 
   // Meters API
   const getMeters = useCallback(() => {
+    if (isDemoMode) {
+      return handleApiCall(() => DemoApiService.getMeters());
+    }
     return handleApiCall(() => axios.get('/api/meters').then(res => res.data));
   }, [handleApiCall]);
 
@@ -217,6 +233,9 @@ export const ApiProvider = ({ children }) => {
   }, [handleApiCall]);
 
   const getMeterReadings = useCallback((meterId) => {
+    if (isDemoMode) {
+      return handleApiCall(() => DemoApiService.getMeterReadings(meterId));
+    }
     return handleApiCall(() => axios.get(`/api/meters/${meterId}/readings`).then(res => res.data));
   }, [handleApiCall]);
 
@@ -230,6 +249,9 @@ export const ApiProvider = ({ children }) => {
 
   // Energy Consumption API
   const getEnergyConsumption = useCallback((period = 'monthly') => {
+    if (isDemoMode) {
+      return handleApiCall(() => DemoApiService.getEnergyConsumption());
+    }
     return handleApiCall(() => axios.get(`/api/energy-consumption?period=${period}`).then(res => res.data));
   }, [handleApiCall]);
 

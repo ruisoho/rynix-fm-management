@@ -49,7 +49,7 @@ const Dashboard = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showQuickActions, setShowQuickActions] = useState(false);
   const [alerts, setAlerts] = useState([]);
-  const [chartFilter, setChartFilter] = useState('monthly');
+  const [chartFilter, setChartFilter] = useState('daily');
   const [selectedChart, setSelectedChart] = useState('energy');
   const [energyData, setEnergyData] = useState([]);
   const [energyLoading, setEnergyLoading] = useState(false);
@@ -534,49 +534,30 @@ const Dashboard = () => {
     setEnergyLoading(true);
     try {
       const data = await getEnergyConsumption(period);
-      setEnergyData(data);
+      console.log('Energy data received from API:', data);
+      setEnergyData(data || []);
     } catch (error) {
       console.error('Error fetching energy data:', error);
-      // Fallback to sample data if API fails
+      // Fallback to sample data if API fails completely
       const baseData = {
         daily: [
-          { name: 'Mon', electricity: 120, gas: 80, heating: 60 },
-          { name: 'Tue', electricity: 135, gas: 85, heating: 65 },
-          { name: 'Wed', electricity: 128, gas: 78, heating: 58 },
-          { name: 'Thu', electricity: 142, gas: 92, heating: 72 },
-          { name: 'Fri', electricity: 155, gas: 88, heating: 68 },
-          { name: 'Sat', electricity: 98, gas: 65, heating: 45 },
-          { name: 'Sun', electricity: 89, gas: 58, heating: 42 }
-        ],
-        weekly: [
-          { name: 'Week 1', electricity: 890, gas: 580, heating: 420 },
-          { name: 'Week 2', electricity: 920, gas: 610, heating: 450 },
-          { name: 'Week 3', electricity: 875, gas: 565, heating: 410 },
-          { name: 'Week 4', electricity: 945, gas: 625, heating: 475 }
+          { name: 'Mon', electricity: 120, gas: 80, heating: 0.06 },
+          { name: 'Tue', electricity: 135, gas: 85, heating: 0.065 },
+          { name: 'Wed', electricity: 128, gas: 78, heating: 0.058 },
+          { name: 'Thu', electricity: 142, gas: 92, heating: 0.072 },
+          { name: 'Fri', electricity: 155, gas: 88, heating: 0.068 },
+          { name: 'Sat', electricity: 98, gas: 65, heating: 0.045 },
+          { name: 'Sun', electricity: 89, gas: 58, heating: 0.042 }
         ],
         monthly: [
-          { name: 'Jan', electricity: 3200, gas: 2100, heating: 1800 },
-          { name: 'Feb', electricity: 2900, gas: 1950, heating: 1650 },
-          { name: 'Mar', electricity: 3100, gas: 2000, heating: 1500 },
-          { name: 'Apr', electricity: 2800, gas: 1800, heating: 1200 },
-          { name: 'May', electricity: 2600, gas: 1650, heating: 900 },
-          { name: 'Jun', electricity: 2400, gas: 1500, heating: 600 },
-          { name: 'Jul', electricity: 2200, gas: 1400, heating: 500 },
-          { name: 'Aug', electricity: 2300, gas: 1450, heating: 550 },
-          { name: 'Sep', electricity: 2500, gas: 1600, heating: 800 },
-          { name: 'Oct', electricity: 2800, gas: 1850, heating: 1100 },
-          { name: 'Nov', electricity: 3000, gas: 2000, heating: 1400 },
-          { name: 'Dec', electricity: 3300, gas: 2200, heating: 1900 }
-        ],
-        yearly: [
-          { name: '2020', electricity: 32000, gas: 21000, heating: 15000 },
-          { name: '2021', electricity: 34500, gas: 22500, heating: 16200 },
-          { name: '2022', electricity: 33800, gas: 21800, heating: 15800 },
-          { name: '2023', electricity: 35200, gas: 23200, heating: 16800 },
-          { name: '2024', electricity: 36800, gas: 24000, heating: 17500 }
+          { name: 'Jan', electricity: 45000, gas: 50000, heating: 0 },
+          { name: 'Feb', electricity: 42000, gas: 48000, heating: 0 },
+          { name: 'Mar', electricity: 46000, gas: 49000, heating: 0 },
+          { name: 'Apr', electricity: 40000, gas: 42000, heating: 0 },
+          { name: 'May', electricity: 38000, gas: 40000, heating: 0 }
         ]
       };
-      setEnergyData(baseData[period] || baseData.monthly);
+      setEnergyData(baseData[period] || baseData.daily);
     } finally {
       setEnergyLoading(false);
     }
@@ -596,7 +577,7 @@ const Dashboard = () => {
         lines: [
           { key: 'electricity', color: '#3B82F6', name: 'Electricity (kWh)' },
           { key: 'gas', color: '#F59E0B', name: 'Gas (m³)' },
-          { key: 'heating', color: '#EF4444', name: 'Heating (kWh)' }
+          { key: 'heating', color: '#EF4444', name: 'Heating (MWh)' }
         ]
       },
       electricity: {
@@ -1050,7 +1031,8 @@ const Dashboard = () => {
                     orientation="right"
                     className="text-xs"
                     tick={{ fontSize: 12 }}
-                    label={{ value: 'Heating', angle: 90, position: 'insideRight' }}
+                    label={{ value: 'Heating (MWh)', angle: 90, position: 'insideRight' }}
+                    domain={[0, 'dataMax + 5']}
                   />
                   <Tooltip 
                     contentStyle={{
@@ -1067,9 +1049,9 @@ const Dashboard = () => {
                       type="monotone"
                       dataKey={line.key}
                       stroke={line.color}
-                      strokeWidth={2}
-                      dot={{ fill: line.color, strokeWidth: 2, r: 4 }}
-                      activeDot={{ r: 6, stroke: line.color, strokeWidth: 2 }}
+                      strokeWidth={line.key === 'heating' ? 3 : 2}
+                      dot={{ fill: line.color, strokeWidth: 2, r: line.key === 'heating' ? 5 : 4 }}
+                      activeDot={{ r: line.key === 'heating' ? 7 : 6, stroke: line.color, strokeWidth: 2 }}
                       name={line.name}
                       yAxisId={line.key === 'heating' ? 'right' : 'left'}
                     />
@@ -1087,6 +1069,7 @@ const Dashboard = () => {
             )}
           </div>
           
+
           {/* Chart Summary */}
           <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
             {!energyLoading && energyData.length > 0 && getChartConfig().lines.map((line) => {

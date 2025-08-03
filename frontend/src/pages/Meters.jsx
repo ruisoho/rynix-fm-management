@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   PlusIcon,
   BoltIcon,
@@ -101,6 +101,35 @@ const Meters = () => {
     notes: ''
   });
 
+  const fetchData = useCallback(async () => {
+    try {
+      const [metersData, heatingData, facilitiesData] = await Promise.all([
+        getMeters(),
+        getHeating(),
+        getFacilities()
+      ]);
+      
+      // Separate meters by type
+      const allMeters = Array.isArray(metersData) ? metersData : [];
+      const electricFiltered = allMeters.filter(meter => meter.type === 'electric');
+      const gasFiltered = allMeters.filter(meter => meter.type === 'gas');
+      const heatingFiltered = Array.isArray(heatingData) ? heatingData : [];
+      
+
+      
+      setElectricMeters(electricFiltered);
+      setGasMeters(gasFiltered);
+      setHeatingMeters(heatingFiltered);
+      setFacilities(Array.isArray(facilitiesData) ? facilitiesData : []);
+    } catch (err) {
+      console.error('Failed to fetch data:', err);
+      setElectricMeters([]);
+      setGasMeters([]);
+      setHeatingMeters([]);
+      setFacilities([]);
+    }
+  }, [getMeters, getHeating, getFacilities]);
+
   useEffect(() => {
     fetchData();
     
@@ -113,30 +142,23 @@ const Meters = () => {
         console.error('Failed to parse saved meter order:', err);
       }
     }
-  }, []);
-
-  const fetchData = async () => {
-    try {
-      const [metersData, heatingData, facilitiesData] = await Promise.all([
-        getMeters(),
-        getHeating(),
-        getFacilities()
-      ]);
-      
-      // Separate meters by type
-      const allMeters = Array.isArray(metersData) ? metersData : [];
-      setElectricMeters(allMeters.filter(meter => meter.type === 'electric'));
-      setGasMeters(allMeters.filter(meter => meter.type === 'gas'));
-      setHeatingMeters(Array.isArray(heatingData) ? heatingData : []);
-      setFacilities(Array.isArray(facilitiesData) ? facilitiesData : []);
-    } catch (err) {
-      console.error('Failed to fetch data:', err);
-      setElectricMeters([]);
-      setGasMeters([]);
-      setHeatingMeters([]);
-      setFacilities([]);
+  }, [fetchData]);
+  
+  // Add a separate effect to ensure data is loaded
+  useEffect(() => {
+    if (electricMeters.length === 0 && gasMeters.length === 0 && heatingMeters.length === 0) {
+      console.log('No meters loaded, retrying...');
+      fetchData();
     }
-  };
+  }, [electricMeters, gasMeters, heatingMeters, fetchData]);
+  
+  // Force refresh heating data when switching to heating tab
+  useEffect(() => {
+    if (activeTab === 'heating' && heatingMeters.length === 0) {
+      console.log('Heating tab selected but no heating meters, refreshing...');
+      fetchData();
+    }
+  }, [activeTab, heatingMeters.length, fetchData]);
 
   const handleElectricSubmit = async (e) => {
     e.preventDefault();
@@ -576,6 +598,8 @@ const Meters = () => {
           <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
         </div>
       )}
+      
+
 
       {/* Meter type tabs */}
       <div className="border-b border-gray-200 dark:border-gray-700">
