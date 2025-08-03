@@ -192,13 +192,23 @@ function initializeDatabase() {
           } else {
             // Run database migrations for existing databases
             runMigrations().then(() => {
-              // Initialize performance optimizer for existing database
+              // Run v1.1 migration for existing databases
+              return runV11Migration();
+            }).then(() => {
+              // Initialize performance optimizer
               performanceOptimizer = new PerformanceOptimizer(db);
-              performanceOptimizer.initialize().then(() => {
-                console.log('🚀 Performance optimizations applied');
-              }).catch(err => {
-                console.error('Performance optimizer initialization failed:', err);
-              });
+              return performanceOptimizer.initialize();
+            }).then(() => {
+              console.log('🚀 Performance optimizations applied');
+              
+              // Initialize data archiver
+              dataArchiver = new DataArchiver(db);
+              return dataArchiver.initialize();
+            }).then(() => {
+              console.log('📦 Data archiver initialized');
+              
+              // Schedule automatic archiving (every 24 hours)
+              dataArchiver.scheduleAutoArchiving(24);
               
               // Enable WAL mode for better performance
               db.run('PRAGMA journal_mode = WAL', (err) => {
@@ -207,7 +217,10 @@ function initializeDatabase() {
                 }
                 resolve(true);
               });
-            }).catch(reject);
+            }).catch(err => {
+              console.error('v1.1 services initialization failed:', err);
+              reject(err);
+            });
           }
         });
       });
