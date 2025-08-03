@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
+import DemoBanner from './components/DemoBanner';
 import Dashboard from './pages/Dashboard';
 import Facilities from './pages/Facilities';
 import FacilityDetail from './pages/FacilityDetail';
@@ -92,6 +93,7 @@ function App() {
           }}
         >
           <div className="min-h-screen bg-light-bg dark:bg-dark-bg text-light-text dark:text-dark-text transition-colors duration-300">
+            <DemoBanner />
             <div className="flex">
               {/* Mobile sidebar overlay */}
               {sidebarOpen && (
