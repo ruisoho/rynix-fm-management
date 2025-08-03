@@ -14,7 +14,12 @@ import {
   Bars3Icon,
   ArrowUpTrayIcon,
   DocumentTextIcon,
-  XMarkIcon
+  XMarkIcon,
+  MagnifyingGlassIcon,
+  FunnelIcon,
+  XCircleIcon,
+  CheckCircleIcon,
+  ClockIcon
 } from '@heroicons/react/24/outline';
 import { useApi } from '../contexts/ApiContext';
 import { format, isAfter, parseISO } from 'date-fns';
@@ -52,6 +57,16 @@ const Meters = () => {
   const [selectedMeter, setSelectedMeter] = useState(null);
   const [readings, setReadings] = useState([]);
   const [filter, setFilter] = useState('all');
+  
+  // Enhanced search and filtering state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [facilityFilter, setFacilityFilter] = useState('all');
+  const [dateFilter, setDateFilter] = useState('all');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [selectedMeters, setSelectedMeters] = useState([]);
+  const [bulkAction, setBulkAction] = useState('');
+  const [sortBy, setSortBy] = useState('serial_number');
+  const [sortOrder, setSortOrder] = useState('asc');
   
   // CSV Upload state
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -434,6 +449,63 @@ const Meters = () => {
     };
     return statusClasses[status] || 'inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
   };
+  
+  // Get meter analytics preview
+  const getMeterAnalytics = (meter) => {
+    // This would typically fetch from API, for now return mock data based on meter ID
+    const mockReadings = [
+      { date: '2025-01-01', value: 1000 + (meter.id * 10) },
+      { date: '2025-01-15', value: 1050 + (meter.id * 12) },
+      { date: '2025-02-01', value: 1100 + (meter.id * 15) },
+      { date: '2025-02-08', value: 1125 + (meter.id * 18) }
+    ];
+    
+    if (mockReadings.length < 2) {
+      return {
+        lastReading: null,
+        trend: 'neutral',
+        consumption: 0,
+        readingCount: mockReadings.length
+      };
+    }
+    
+    const lastReading = mockReadings[mockReadings.length - 1];
+    const previousReading = mockReadings[mockReadings.length - 2];
+    const consumption = lastReading.value - previousReading.value;
+    const trend = consumption > 0 ? 'up' : consumption < 0 ? 'down' : 'neutral';
+    
+    return {
+      lastReading,
+      trend,
+      consumption: Math.abs(consumption),
+      readingCount: mockReadings.length,
+      unit: activeTab === 'electric' ? 'kWh' : activeTab === 'gas' ? 'm³' : 'MWh'
+    };
+  };
+  
+  // Get trend icon and color
+  const getTrendDisplay = (trend) => {
+    switch (trend) {
+      case 'up':
+        return {
+          icon: '↗️',
+          color: 'text-red-600 dark:text-red-400',
+          bgColor: 'bg-red-50 dark:bg-red-900/20'
+        };
+      case 'down':
+        return {
+          icon: '↘️',
+          color: 'text-green-600 dark:text-green-400',
+          bgColor: 'bg-green-50 dark:bg-green-900/20'
+        };
+      default:
+        return {
+          icon: '→',
+          color: 'text-gray-600 dark:text-gray-400',
+          bgColor: 'bg-gray-50 dark:bg-gray-900/20'
+        };
+    }
+  };
 
   const getCurrentMeters = () => {
     switch (activeTab) {
@@ -449,13 +521,82 @@ const Meters = () => {
   };
 
   const getFilteredMeters = () => {
-    const currentMeters = getCurrentMeters();
-    const filtered = filter === 'all' ? currentMeters : currentMeters.filter(meter => meter.status === filter);
+    let currentMeters = getCurrentMeters();
     
-    // Apply custom ordering if exists
+    // Apply status filter
+    if (filter !== 'all') {
+      currentMeters = currentMeters.filter(meter => meter.status === filter);
+    }
+    
+    // Apply search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      currentMeters = currentMeters.filter(meter => 
+        (meter.serial_number && meter.serial_number.toLowerCase().includes(query)) ||
+        (meter.location && meter.location.toLowerCase().includes(query)) ||
+        (meter.facility_name && meter.facility_name.toLowerCase().includes(query)) ||
+        (meter.notes && meter.notes.toLowerCase().includes(query))
+      );
+    }
+    
+    // Apply facility filter
+    if (facilityFilter !== 'all') {
+      currentMeters = currentMeters.filter(meter => 
+        meter.facility_id === parseInt(facilityFilter)
+      );
+    }
+    
+    // Apply date filter
+    if (dateFilter !== 'all') {
+      const now = new Date();
+      const filterDate = new Date();
+      
+      switch (dateFilter) {
+        case 'last_month':
+          filterDate.setMonth(now.getMonth() - 1);
+          break;
+        case 'last_3_months':
+          filterDate.setMonth(now.getMonth() - 3);
+          break;
+        case 'last_year':
+          filterDate.setFullYear(now.getFullYear() - 1);
+          break;
+        default:
+          break;
+      }
+      
+      if (dateFilter !== 'all') {
+        currentMeters = currentMeters.filter(meter => {
+          if (!meter.installation_date) return false;
+          const installDate = new Date(meter.installation_date);
+          return installDate >= filterDate;
+        });
+      }
+    }
+    
+    // Apply sorting
+    currentMeters.sort((a, b) => {
+      let aValue = a[sortBy] || '';
+      let bValue = b[sortBy] || '';
+      
+      // Handle different data types
+      if (sortBy === 'installation_date') {
+        aValue = new Date(aValue || '1900-01-01');
+        bValue = new Date(bValue || '1900-01-01');
+      } else if (typeof aValue === 'string') {
+        aValue = aValue.toLowerCase();
+        bValue = bValue.toLowerCase();
+      }
+      
+      if (aValue < bValue) return sortOrder === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
+    
+    // Apply custom ordering if exists (for drag & drop)
     const orderKey = `${activeTab}_${filter}`;
-    if (meterOrder[orderKey]) {
-      return filtered.sort((a, b) => {
+    if (meterOrder[orderKey] && !searchQuery && facilityFilter === 'all' && dateFilter === 'all') {
+      return currentMeters.sort((a, b) => {
         const aIndex = meterOrder[orderKey].indexOf(a.id);
         const bIndex = meterOrder[orderKey].indexOf(b.id);
         if (aIndex === -1 && bIndex === -1) return 0;
@@ -465,7 +606,7 @@ const Meters = () => {
       });
     }
     
-    return filtered;
+    return currentMeters;
   };
 
   const getStatusCounts = () => {
@@ -599,7 +740,226 @@ const Meters = () => {
         </div>
       )}
       
-
+      {/* Enhanced Search and Filter Interface */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 mb-6">
+        {/* Search Bar */}
+        <div className="flex flex-col sm:flex-row gap-4 mb-4">
+          <div className="flex-1 relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" />
+            </div>
+            <input
+              type="text"
+              placeholder="Search meters by serial number, location, facility, or notes..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md leading-5 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center"
+              >
+                <XCircleIcon className="h-5 w-5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" />
+              </button>
+            )}
+          </div>
+          
+          {/* Advanced Filters Toggle */}
+          <button
+            onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+            className={`flex items-center px-4 py-2 border rounded-md text-sm font-medium transition-colors ${
+              showAdvancedFilters
+                ? 'border-primary-500 text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20'
+                : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600'
+            }`}
+          >
+            <FunnelIcon className="h-4 w-4 mr-2" />
+            Filters
+            {(facilityFilter !== 'all' || dateFilter !== 'all') && (
+              <span className="ml-2 bg-primary-100 dark:bg-primary-800 text-primary-800 dark:text-primary-200 text-xs px-2 py-0.5 rounded-full">
+                Active
+              </span>
+            )}
+          </button>
+        </div>
+        
+        {/* Advanced Filters */}
+        {showAdvancedFilters && (
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Facility Filter */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Facility
+                </label>
+                <select
+                  value={facilityFilter}
+                  onChange={(e) => setFacilityFilter(e.target.value)}
+                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                >
+                  <option value="all">All Facilities</option>
+                  {facilities.map(facility => (
+                    <option key={facility.id} value={facility.id}>
+                      {facility.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              {/* Date Filter */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Installation Date
+                </label>
+                <select
+                  value={dateFilter}
+                  onChange={(e) => setDateFilter(e.target.value)}
+                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                >
+                  <option value="all">All Dates</option>
+                  <option value="last_month">Last Month</option>
+                  <option value="last_3_months">Last 3 Months</option>
+                  <option value="last_year">Last Year</option>
+                </select>
+              </div>
+              
+              {/* Sort By */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Sort By
+                </label>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                >
+                  <option value="serial_number">Serial Number</option>
+                  <option value="location">Location</option>
+                  <option value="facility_name">Facility</option>
+                  <option value="installation_date">Installation Date</option>
+                  <option value="status">Status</option>
+                </select>
+              </div>
+              
+              {/* Sort Order */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Order
+                </label>
+                <select
+                  value={sortOrder}
+                  onChange={(e) => setSortOrder(e.target.value)}
+                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                >
+                  <option value="asc">Ascending</option>
+                  <option value="desc">Descending</option>
+                </select>
+              </div>
+            </div>
+            
+            {/* Clear Filters */}
+            {(searchQuery || facilityFilter !== 'all' || dateFilter !== 'all' || sortBy !== 'serial_number' || sortOrder !== 'asc') && (
+              <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <button
+                  onClick={() => {
+                    setSearchQuery('');
+                    setFacilityFilter('all');
+                    setDateFilter('all');
+                    setSortBy('serial_number');
+                    setSortOrder('asc');
+                  }}
+                  className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 flex items-center"
+                >
+                  <XCircleIcon className="h-4 w-4 mr-1" />
+                  Clear all filters
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+        
+        {/* Results Summary */}
+         <div className="mt-4 flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
+           <span>
+             Showing {getFilteredMeters().length} of {getCurrentMeters().length} {getTabLabel(activeTab).toLowerCase()}
+           </span>
+           {(searchQuery || facilityFilter !== 'all' || dateFilter !== 'all') && (
+             <span className="flex items-center">
+               <FunnelIcon className="h-4 w-4 mr-1" />
+               Filters active
+             </span>
+           )}
+         </div>
+       </div>
+       
+       {/* Bulk Actions Toolbar */}
+       {selectedMeters.length > 0 && (
+         <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-lg p-4 mb-6">
+           <div className="flex items-center justify-between">
+             <div className="flex items-center">
+               <CheckCircleIcon className="h-5 w-5 text-primary-600 dark:text-primary-400 mr-2" />
+               <span className="text-sm font-medium text-primary-900 dark:text-primary-100">
+                 {selectedMeters.length} meter{selectedMeters.length !== 1 ? 's' : ''} selected
+               </span>
+             </div>
+             
+             <div className="flex items-center space-x-3">
+               {/* Select All/None */}
+               <button
+                 onClick={() => {
+                   const allMeterIds = getFilteredMeters().map(m => m.id);
+                   if (selectedMeters.length === allMeterIds.length) {
+                     setSelectedMeters([]);
+                   } else {
+                     setSelectedMeters(allMeterIds);
+                   }
+                 }}
+                 className="text-sm text-primary-600 dark:text-primary-400 hover:text-primary-800 dark:hover:text-primary-200"
+               >
+                 {selectedMeters.length === getFilteredMeters().length ? 'Deselect All' : 'Select All'}
+               </button>
+               
+               {/* Bulk Actions */}
+               <select
+                 value={bulkAction}
+                 onChange={(e) => setBulkAction(e.target.value)}
+                 className="text-sm border border-primary-300 dark:border-primary-600 rounded-md px-3 py-1 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+               >
+                 <option value="">Bulk Actions</option>
+                 <option value="activate">Set Active</option>
+                 <option value="deactivate">Set Inactive</option>
+                 <option value="maintenance">Set Maintenance</option>
+                 <option value="export">Export Selected</option>
+                 <option value="delete">Delete Selected</option>
+               </select>
+               
+               {bulkAction && (
+                 <button
+                   onClick={() => {
+                     // Handle bulk action
+                     console.log(`Performing ${bulkAction} on meters:`, selectedMeters);
+                     // Reset after action
+                     setBulkAction('');
+                     setSelectedMeters([]);
+                   }}
+                   className="btn btn-primary btn-sm"
+                 >
+                   Apply
+                 </button>
+               )}
+               
+               {/* Clear Selection */}
+               <button
+                 onClick={() => setSelectedMeters([])}
+                 className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+               >
+                 <XCircleIcon className="h-4 w-4" />
+               </button>
+             </div>
+           </div>
+         </div>
+       )}
 
       {/* Meter type tabs */}
       <div className="border-b border-gray-200 dark:border-gray-700">
@@ -707,12 +1067,29 @@ const Meters = () => {
                 }`}
               >
                 <div className="card-body relative">
+                  {/* Selection checkbox */}
+                  <div className="absolute top-2 left-2 z-10">
+                    <input
+                      type="checkbox"
+                      checked={selectedMeters.includes(meter.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedMeters([...selectedMeters, meter.id]);
+                        } else {
+                          setSelectedMeters(selectedMeters.filter(id => id !== meter.id));
+                        }
+                      }}
+                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 dark:border-gray-600 rounded"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </div>
+                  
                   {/* Drag handle */}
                   <div className="absolute top-2 right-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
                     <Bars3Icon className="h-4 w-4" />
                   </div>
                   
-                  <div className="flex items-start justify-between mb-4 pr-8">
+                  <div className="flex items-start justify-between mb-4 pr-8 pl-8">
                     <div className="flex items-center">
                       <div className="p-2 bg-primary-100 dark:bg-primary-900 rounded-lg mr-3">
                         <Icon className="h-6 w-6 text-primary-600" />
@@ -812,6 +1189,71 @@ const Meters = () => {
                       </>
                     )}
                   </div>
+                  
+                  {/* Analytics Preview */}
+                  {(() => {
+                    const analytics = getMeterAnalytics(meter);
+                    const trendDisplay = getTrendDisplay(analytics.trend);
+                    
+                    return (
+                      <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">
+                            Latest Reading
+                          </span>
+                          <div className={`flex items-center px-2 py-1 rounded-full text-xs ${trendDisplay.bgColor}`}>
+                            <span className="mr-1">{trendDisplay.icon}</span>
+                            <span className={trendDisplay.color}>
+                              {analytics.consumption} {analytics.unit}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        {analytics.lastReading ? (
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                                {analytics.lastReading.value.toLocaleString()} {analytics.unit}
+                              </div>
+                              <div className="text-xs text-gray-500 dark:text-gray-400">
+                                {formatDate(analytics.lastReading.date)}
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-xs text-gray-500 dark:text-gray-400">
+                                {analytics.readingCount} readings
+                              </div>
+                              <button
+                                onClick={() => {
+                                  setSelectedMeter(meter);
+                                  setShowReadingsModal(true);
+                                }}
+                                className="text-xs text-primary-600 dark:text-primary-400 hover:text-primary-800 dark:hover:text-primary-200 flex items-center mt-1"
+                              >
+                                <ChartBarIcon className="h-3 w-3 mr-1" />
+                                View Trends
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-center py-2">
+                            <div className="text-sm text-gray-500 dark:text-gray-400">
+                              No readings available
+                            </div>
+                            <button
+                              onClick={() => {
+                                setSelectedMeter(meter);
+                                setShowReadingModal(true);
+                              }}
+                              className="text-xs text-primary-600 dark:text-primary-400 hover:text-primary-800 dark:hover:text-primary-200 mt-1"
+                            >
+                              Add First Reading
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
                     <div className="flex space-x-2">
