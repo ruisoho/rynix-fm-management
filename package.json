@@ -1,6 +1,6 @@
 {
   "name": "rynix-fm-management",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Rynix FM Management - Comprehensive web-based facility management application with energy monitoring",
   "main": "backend/server.js",
   "homepage": "./",

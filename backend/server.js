@@ -6,6 +6,7 @@ const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcrypt');
 const multer = require('multer');
 const PerformanceOptimizer = require('./services/performanceOptimizer');
+const DataArchiver = require('./services/dataArchiver');
 require('dotenv').config();
 
 // Configure multer for file uploads
@@ -31,8 +32,51 @@ const dbPath = path.join(__dirname, '..', 'app.db');
 const schemaPath = path.join(__dirname, '..', 'database', 'schema.sql');
 let db;
 let performanceOptimizer;
+let dataArchiver;
 
 // Database migrations
+function runV11Migration() {
+  return new Promise((resolve, reject) => {
+    console.log('🔄 Running v1.1 migration...');
+    
+    const migrationPath = path.join(__dirname, '..', 'database', 'migration_v1_1.sql');
+    
+    try {
+      const migrationSql = fs.readFileSync(migrationPath, 'utf8');
+      const statements = migrationSql.split(';').filter(stmt => stmt.trim().length > 0);
+      
+      let completed = 0;
+      const total = statements.length;
+      
+      statements.forEach((statement, index) => {
+        const trimmedStatement = statement.trim();
+        if (trimmedStatement) {
+          db.run(trimmedStatement, (err) => {
+            if (err && !err.message.includes('already exists')) {
+              console.warn(`Warning in migration statement ${index + 1}:`, err.message);
+            }
+            
+            completed++;
+            if (completed === total) {
+              console.log('✅ v1.1 migration completed successfully');
+              resolve();
+            }
+          });
+        } else {
+          completed++;
+          if (completed === total) {
+            console.log('✅ v1.1 migration completed successfully');
+            resolve();
+          }
+        }
+      });
+    } catch (error) {
+      console.error('❌ v1.1 migration failed:', error);
+      reject(error);
+    }
+  });
+}
+
 function runMigrations() {
   return new Promise((resolve, reject) => {
     console.log('Running database migrations...');
@@ -97,12 +141,25 @@ function initializeDatabase() {
             const executeStatement = (index) => {
               if (index >= statements.length) {
                 console.log('Database initialized successfully.');
-            // Initialize performance optimizer
-            performanceOptimizer = new PerformanceOptimizer(db);
-            performanceOptimizer.initialize().then(() => {
+            
+            // Run v1.1 migration
+            runV11Migration().then(() => {
+              // Initialize performance optimizer
+              performanceOptimizer = new PerformanceOptimizer(db);
+              return performanceOptimizer.initialize();
+            }).then(() => {
               console.log('🚀 Performance optimizations applied');
+              
+              // Initialize data archiver
+              dataArchiver = new DataArchiver(db);
+              return dataArchiver.initialize();
+            }).then(() => {
+              console.log('📦 Data archiver initialized');
+              
+              // Schedule automatic archiving (every 24 hours)
+              dataArchiver.scheduleAutoArchiving(24);
             }).catch(err => {
-              console.error('Performance optimizer initialization failed:', err);
+              console.error('v1.1 services initialization failed:', err);
             });
             
             // Enable WAL mode for better performance
@@ -1885,6 +1942,74 @@ app.post('/api/performance/maintenance', async (req, res) => {
     console.error('Maintenance tasks failed:', error);
     res.status(500).json({ error: 'Failed to run maintenance tasks' });
   }
+});
+
+// ============================================================================
+// V1.1 DATA ARCHIVING ENDPOINTS
+// ============================================================================
+
+// Get archive statistics
+app.get('/api/v11/archive/stats', async (req, res) => {
+  if (!dataArchiver) {
+    return res.status(503).json({ error: 'Data archiver not ready' });
+  }
+  
+  try {
+    const stats = await dataArchiver.getArchiveStats();
+    const archivableStats = await dataArchiver.getArchivableDataStats();
+    
+    res.json({
+      archiveStats: stats,
+      archivableData: archivableStats,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Failed to get archive stats:', error);
+    res.status(500).json({ error: 'Failed to retrieve archive statistics' });
+  }
+});
+
+// Manual archive operation
+app.post('/api/v11/archive/run', async (req, res) => {
+  if (!dataArchiver) {
+    return res.status(503).json({ error: 'Data archiver not ready' });
+  }
+  
+  try {
+    const { monthsToKeep = 12, dryRun = false } = req.body;
+    
+    const result = await dataArchiver.archiveOldReadings({
+      monthsToKeep,
+      dryRun
+    });
+    
+    res.json({
+      message: dryRun ? 'Dry run completed successfully' : 'Archiving completed successfully',
+      ...result
+    });
+  } catch (error) {
+    console.error('Archive operation failed:', error);
+    res.status(500).json({ error: 'Failed to run archive operation' });
+  }
+});
+
+// Get database version info
+app.get('/api/v11/version', (req, res) => {
+  const query = `SELECT * FROM database_version ORDER BY applied_at DESC`;
+  
+  db.all(query, (err, rows) => {
+    if (err) {
+      console.error('Version query error:', err);
+      res.status(500).json({ error: 'Failed to retrieve version information' });
+      return;
+    }
+    
+    res.json({
+      versions: rows,
+      currentVersion: '1.1.0',
+      timestamp: new Date().toISOString()
+    });
+  });
 });
 
 // Helper function to format period names

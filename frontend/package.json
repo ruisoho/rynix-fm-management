@@ -1,6 +1,6 @@
 {
   "name": "facility-manager-frontend",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "homepage": "https://ruisoho.github.io/rynix-fm-management",
   "private": true,
   "dependencies": {
