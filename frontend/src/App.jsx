@@ -27,7 +27,8 @@ function App() {
     const checkApiHealth = async () => {
       try {
         console.log('Checking API health...');
-        const response = await fetch('/api/health');
+        const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+        const response = await fetch(`${apiUrl}/api/health`);
         console.log('API health response:', response.status, response.ok);
         if (!response.ok) {
           throw new Error('API not available');

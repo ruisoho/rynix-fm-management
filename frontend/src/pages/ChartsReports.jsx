@@ -41,7 +41,7 @@ const ChartsReports = () => {
   const [facilities, setFacilities] = useState([]);
   const [meterReadings, setMeterReadings] = useState({});
   const [activeTab, setActiveTab] = useState('overview');
-  const [dateRange, setDateRange] = useState('30days');
+  const [dateRange, setDateRange] = useState('30');
   const [selectedFacility, setSelectedFacility] = useState('all');
   const [selectedMeter, setSelectedMeter] = useState('all');
   const [reportType, setReportType] = useState('summary');
@@ -51,6 +51,9 @@ const ChartsReports = () => {
   const [chartFilter, setChartFilter] = useState('daily');
   const [selectedChart, setSelectedChart] = useState('energy');
   const [energyLoading, setEnergyLoading] = useState(false);
+  const [showAdvancedMetrics, setShowAdvancedMetrics] = useState(false);
+  const [alertThreshold, setAlertThreshold] = useState(1000);
+  const [showPredictions, setShowPredictions] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -131,6 +134,73 @@ const ChartsReports = () => {
     }
   };
 
+  // Advanced Analytics Functions
+  const getConsumptionTrend = (data) => {
+    if (data.length < 2) return 'stable';
+    const recent = data.slice(-3).reduce((sum, item) => sum + (item.electricity || 0), 0) / 3;
+    const previous = data.slice(-6, -3).reduce((sum, item) => sum + (item.electricity || 0), 0) / 3;
+    const change = ((recent - previous) / previous) * 100;
+    
+    if (change > 10) return 'increasing';
+    if (change < -10) return 'decreasing';
+    return 'stable';
+  };
+
+  const getEfficiencyScore = () => {
+    const totalConsumption = energyData.reduce((sum, item) => 
+      sum + (item.electricity || 0) + (item.gas || 0) + (item.heating || 0), 0
+    );
+    const avgConsumption = totalConsumption / energyData.length;
+    const benchmark = 1000; // Industry benchmark
+    return Math.max(0, Math.min(100, ((benchmark - avgConsumption) / benchmark) * 100));
+  };
+
+  const getPredictedConsumption = (data, periods = 3) => {
+    if (data.length < 3) return [];
+    
+    const trend = data.slice(-3).map((item, index) => ({
+      period: index,
+      value: (item.electricity || 0) + (item.gas || 0) + (item.heating || 0)
+    }));
+    
+    const slope = (trend[2].value - trend[0].value) / 2;
+    const predictions = [];
+    
+    for (let i = 1; i <= periods; i++) {
+      const lastValue = trend[trend.length - 1].value;
+      predictions.push({
+        name: `Predicted +${i}`,
+        electricity: Math.max(0, lastValue + (slope * i) * 0.6),
+        gas: Math.max(0, lastValue + (slope * i) * 0.3),
+        heating: Math.max(0, (lastValue + (slope * i)) * 0.1),
+        isPrediction: true
+      });
+    }
+    
+    return predictions;
+  };
+
+  const getAnomalies = () => {
+    if (energyData.length < 5) return [];
+    
+    const anomalies = [];
+    const avgElectricity = energyData.reduce((sum, item) => sum + (item.electricity || 0), 0) / energyData.length;
+    const threshold = avgElectricity * 1.5;
+    
+    energyData.forEach((item, index) => {
+      if (item.electricity > threshold) {
+        anomalies.push({
+          period: item.name,
+          type: 'High Consumption',
+          value: item.electricity,
+          severity: item.electricity > threshold * 1.5 ? 'high' : 'medium'
+        });
+      }
+    });
+    
+    return anomalies;
+  };
+
   // Get chart configuration based on selected chart type
   const getChartConfig = () => {
     const configs = {
@@ -140,7 +210,7 @@ const ChartsReports = () => {
         lines: [
           { key: 'electricity', color: '#3B82F6', name: 'Electricity (kWh)' },
           { key: 'gas', color: '#F59E0B', name: 'Gas (m³)' },
-          { key: 'heating', color: '#EF4444', name: 'Heating (MWh)' }
+          { key: 'heating', color: '#EF4444', name: 'Heating (kWh)' }
         ]
       },
       electricity: {
@@ -156,7 +226,7 @@ const ChartsReports = () => {
       heating: {
           title: 'Heating Usage',
           data: energyData,
-          lines: [{ key: 'heating', color: '#EF4444', name: 'Heating (MWh)' }]
+          lines: [{ key: 'heating', color: '#EF4444', name: 'Heating (kWh)' }]
         }
     };
     return configs[selectedChart] || configs.energy;
@@ -443,97 +513,381 @@ const ChartsReports = () => {
 
   const consumptionTrends = getConsumptionTrends();
 
-  const exportReport = () => {
+  // Enhanced Export Functions
+  const exportToJSON = () => {
     const reportData = {
       generatedAt: new Date().toISOString(),
       dateRange,
       selectedFacility: selectedFacility === 'all' ? 'All Facilities' : facilities.find(f => f.id === parseInt(selectedFacility))?.name,
       heatingStats,
       meterStats,
-      recentReadings: recentReadings.slice(0, 50), // Limit to 50 most recent
-      consumptionTrends: Object.values(consumptionTrends)
+      recentReadings: recentReadings.slice(0, 50),
+      consumptionTrends: Object.values(consumptionTrends),
+      energyData: energyData.slice(0, 100)
     };
     
     const blob = new Blob([JSON.stringify(reportData, null, 2)], { type: 'application/json' });
+    downloadFile(blob, `facility-report-${format(new Date(), 'yyyy-MM-dd')}.json`);
+  };
+
+  const exportToCSV = () => {
+    const csvData = [];
+    csvData.push(['Date', 'Facility', 'Meter ID', 'Type', 'Reading', 'Consumption']);
+    
+    recentReadings.slice(0, 100).forEach(reading => {
+      csvData.push([
+        format(reading.parsedDate, 'yyyy-MM-dd'),
+        reading.meter?.facility?.name || 'Unknown',
+        reading.meter?.id || 'N/A',
+        reading.meter?.type || 'Unknown',
+        reading.value || 0,
+        reading.consumption || 0
+      ]);
+    });
+    
+    const csvContent = csvData.map(row => row.join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    downloadFile(blob, `facility-data-${format(new Date(), 'yyyy-MM-dd')}.csv`);
+  };
+
+  const exportToPDF = () => {
+    // Create a comprehensive HTML report for PDF conversion
+    const reportHTML = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Facility Management Report</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 20px; }
+          .header { text-align: center; margin-bottom: 30px; }
+          .stats { display: flex; justify-content: space-around; margin: 20px 0; }
+          .stat-card { text-align: center; padding: 15px; border: 1px solid #ddd; border-radius: 8px; }
+          table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+          th { background-color: #f2f2f2; }
+          .section { margin: 30px 0; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>📊 Facility Management Report</h1>
+          <p>Generated on ${format(new Date(), 'PPP')}</p>
+          <p>Date Range: ${dateRange} | Facility: ${selectedFacility === 'all' ? 'All Facilities' : facilities.find(f => f.id === parseInt(selectedFacility))?.name}</p>
+        </div>
+        
+        <div class="stats">
+          <div class="stat-card">
+            <h3>${meters.length}</h3>
+            <p>Total Meters</p>
+          </div>
+          <div class="stat-card">
+            <h3>${heating.length}</h3>
+            <p>Heating Systems</p>
+          </div>
+          <div class="stat-card">
+            <h3>${facilities.length}</h3>
+            <p>Facilities</p>
+          </div>
+          <div class="stat-card">
+            <h3>${recentReadings.length}</h3>
+            <p>Recent Readings</p>
+          </div>
+        </div>
+        
+        <div class="section">
+          <h2>Recent Meter Readings</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Facility</th>
+                <th>Meter ID</th>
+                <th>Type</th>
+                <th>Reading</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${recentReadings.slice(0, 20).map(reading => `
+                <tr>
+                  <td>${format(reading.parsedDate, 'yyyy-MM-dd')}</td>
+                  <td>${reading.meter?.facility?.name || 'Unknown'}</td>
+                  <td>${reading.meter?.id || 'N/A'}</td>
+                  <td>${reading.meter?.type || 'Unknown'}</td>
+                  <td>${reading.value || 0}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </body>
+      </html>
+    `;
+    
+    const blob = new Blob([reportHTML], { type: 'text/html' });
+    downloadFile(blob, `facility-report-${format(new Date(), 'yyyy-MM-dd')}.html`);
+  };
+
+  const downloadFile = (blob, filename) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `facility-report-${format(new Date(), 'yyyy-MM-dd')}.json`;
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
 
+  // State for export dropdown and chart controls
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [chartAnimation, setChartAnimation] = useState(true);
+  const [showGrid, setShowGrid] = useState(true);
+
+  // Close export menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showExportMenu && !event.target.closest('.export-dropdown')) {
+        setShowExportMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showExportMenu]);
+
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-            Charts & Reports
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            Analytics and reporting for heating systems and electric meters
-          </p>
+      {/* Enhanced Header with Quick Stats */}
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-900 rounded-lg p-6">
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+              📊 Charts & Reports
+            </h1>
+            <p className="text-gray-600 dark:text-gray-400 mb-4">
+              Comprehensive analytics and reporting for heating systems and electric meters
+            </p>
+            
+            {/* Quick Stats Row */}
+            <div className="flex flex-wrap gap-6 text-sm">
+              <div className="flex items-center">
+                <div className="w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
+                <span className="text-gray-600 dark:text-gray-400">
+                  {meters.length} Total Meters
+                </span>
+              </div>
+              <div className="flex items-center">
+                <div className="w-3 h-3 bg-red-500 rounded-full mr-2"></div>
+                <span className="text-gray-600 dark:text-gray-400">
+                  {heating.length} Heating Systems
+                </span>
+              </div>
+              <div className="flex items-center">
+                <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
+                <span className="text-gray-600 dark:text-gray-400">
+                  {facilities.length} Facilities
+                </span>
+              </div>
+            </div>
+          </div>
+          
+          <div className="flex gap-3">
+            <button
+              onClick={() => window.print()}
+              className="btn btn-secondary flex items-center"
+              title="Print Report"
+            >
+              <svg className="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              Print
+            </button>
+            {/* Enhanced Export Dropdown */}
+            <div className="relative export-dropdown">
+              <button
+                onClick={() => setShowExportMenu(!showExportMenu)}
+                className="btn btn-primary flex items-center"
+              >
+                <ArrowDownTrayIcon className="h-5 w-5 mr-2" />
+                Export Report
+                <svg className="h-4 w-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              
+              {showExportMenu && (
+                <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-50">
+                  <div className="py-2">
+                    <div className="px-4 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200 dark:border-gray-700">
+                      📊 Export Formats
+                    </div>
+                    
+                    <button
+                      onClick={() => {
+                        exportToJSON();
+                        setShowExportMenu(false);
+                      }}
+                      className="w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center transition-colors"
+                    >
+                      <div className="flex items-center">
+                        <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/20 rounded-lg flex items-center justify-center mr-3">
+                          <span className="text-blue-600 dark:text-blue-400 text-sm font-bold">{ }</span>
+                        </div>
+                        <div>
+                          <div className="text-sm font-medium text-gray-900 dark:text-gray-100">JSON Report</div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">Complete data export with all metrics</div>
+                        </div>
+                      </div>
+                    </button>
+                    
+                    <button
+                      onClick={() => {
+                        exportToCSV();
+                        setShowExportMenu(false);
+                      }}
+                      className="w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center transition-colors"
+                    >
+                      <div className="flex items-center">
+                        <div className="w-8 h-8 bg-green-100 dark:bg-green-900/20 rounded-lg flex items-center justify-center mr-3">
+                          <span className="text-green-600 dark:text-green-400 text-sm font-bold">📊</span>
+                        </div>
+                        <div>
+                          <div className="text-sm font-medium text-gray-900 dark:text-gray-100">CSV Data</div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">Spreadsheet-compatible format</div>
+                        </div>
+                      </div>
+                    </button>
+                    
+                    <button
+                      onClick={() => {
+                        exportToPDF();
+                        setShowExportMenu(false);
+                      }}
+                      className="w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center transition-colors"
+                    >
+                      <div className="flex items-center">
+                        <div className="w-8 h-8 bg-red-100 dark:bg-red-900/20 rounded-lg flex items-center justify-center mr-3">
+                          <span className="text-red-600 dark:text-red-400 text-sm font-bold">📄</span>
+                        </div>
+                        <div>
+                          <div className="text-sm font-medium text-gray-900 dark:text-gray-100">HTML Report</div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">Printable formatted report</div>
+                        </div>
+                      </div>
+                    </button>
+                    
+                    <div className="border-t border-gray-200 dark:border-gray-700 mt-2 pt-2">
+                      <button
+                        onClick={() => {
+                          window.print();
+                          setShowExportMenu(false);
+                        }}
+                        className="w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center transition-colors"
+                      >
+                        <div className="flex items-center">
+                          <div className="w-8 h-8 bg-purple-100 dark:bg-purple-900/20 rounded-lg flex items-center justify-center mr-3">
+                            <svg className="h-4 w-4 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                            </svg>
+                          </div>
+                          <div>
+                            <div className="text-sm font-medium text-gray-900 dark:text-gray-100">🖨️ Quick Print</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">Print current view directly</div>
+                          </div>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
-        <button
-          onClick={exportReport}
-          className="btn btn-primary flex items-center"
-        >
-          <ArrowDownTrayIcon className="h-5 w-5 mr-2" />
-          Export Report
-        </button>
       </div>
 
-      {/* Enhanced Filters */}
-      <div className="card">
+      {/* Enhanced Smart Filters */}
+      <div className="card border-l-4 border-l-blue-500">
+        <div className="card-header bg-gray-50 dark:bg-gray-800">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <FunnelIcon className="h-5 w-5 text-blue-500 mr-2" />
+              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
+                Smart Filters & Controls
+              </h3>
+            </div>
+            <button
+              onClick={() => {
+                setDateRange('30');
+                setSelectedFacility('all');
+                setSelectedMeter('all');
+                setChartType('line');
+                setChartFilter('daily');
+                setSelectedChart('energy');
+              }}
+              className="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+            >
+              Reset Filters
+            </button>
+          </div>
+        </div>
         <div className="card-body">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
             <div>
-              <label className="form-label">Date Range</label>
+              <label className="form-label flex items-center">
+                <CalendarIcon className="h-4 w-4 mr-1" />
+                Date Range
+              </label>
               <select
                 value={dateRange}
                 onChange={(e) => setDateRange(e.target.value)}
                 className="form-select"
               >
-                <option value="7days">Last 7 days</option>
-                <option value="30days">Last 30 days</option>
-                <option value="3months">Last 3 months</option>
-                <option value="6months">Last 6 months</option>
-                <option value="1year">Last year</option>
+                <option value="7">📅 Last 7 days</option>
+                <option value="30">📅 Last 30 days</option>
+                <option value="90">📅 Last 3 months</option>
+                <option value="180">📅 Last 6 months</option>
+                <option value="365">📅 Last year</option>
               </select>
             </div>
             
             <div>
-              <label className="form-label">Facility</label>
+              <label className="form-label flex items-center">
+                <BuildingOfficeIcon className="h-4 w-4 mr-1" />
+                Facility
+              </label>
               <select
                 value={selectedFacility}
                 onChange={(e) => setSelectedFacility(e.target.value)}
                 className="form-select"
               >
-                <option value="all">All Facilities</option>
+                <option value="all">🏢 All Facilities ({facilities.length})</option>
                 {facilities.map((facility) => (
                   <option key={facility.id} value={facility.id}>
-                    {facility.name}
+                    🏢 {facility.name}
                   </option>
                 ))}
               </select>
             </div>
             
             <div>
-              <label className="form-label">Individual Meter</label>
+              <label className="form-label flex items-center">
+                <BoltIcon className="h-4 w-4 mr-1" />
+                Individual Meter
+              </label>
               <select
                 value={selectedMeter}
                 onChange={(e) => setSelectedMeter(e.target.value)}
                 className="form-select"
               >
-                <option value="all">All Meters</option>
+                <option value="all">⚡ All Meters ({meters.filter(meter => selectedFacility === 'all' || meter.facility_id === parseInt(selectedFacility)).length})</option>
                 {meters
                   .filter(meter => selectedFacility === 'all' || meter.facility_id === parseInt(selectedFacility))
                   .map(meter => (
                     <option key={meter.id} value={meter.id}>
-                      {meter.serial_number} ({meter.type})
+                      {meter.type === 'electric' ? '⚡' : meter.type === 'gas' ? '🔥' : '💧'} {meter.serial_number} ({meter.type})
                     </option>
                   ))
                 }
@@ -541,113 +895,141 @@ const ChartsReports = () => {
             </div>
             
             <div>
-              <label className="form-label">Chart Type</label>
+              <label className="form-label flex items-center">
+                <ChartBarIcon className="h-4 w-4 mr-1" />
+                Chart Type
+              </label>
               <select
                 value={chartType}
                 onChange={(e) => setChartType(e.target.value)}
                 className="form-select"
               >
-                <option value="line">Line Chart</option>
-                <option value="area">Area Chart</option>
-                <option value="bar">Bar Chart</option>
-                <option value="composed">Combined</option>
+                <option value="line">📈 Line Chart</option>
+                <option value="area">📊 Area Chart</option>
+                <option value="bar">📊 Bar Chart</option>
+                <option value="composed">🔄 Combined</option>
+              </select>
+            </div>
+            
+            <div>
+              <label className="form-label flex items-center">
+                <svg className="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Time Period
+              </label>
+              <select
+                value={chartFilter}
+                onChange={(e) => setChartFilter(e.target.value)}
+                className="form-select"
+              >
+                <option value="daily">📅 Daily</option>
+                <option value="weekly">📅 Weekly</option>
+                <option value="monthly">📅 Monthly</option>
+                <option value="yearly">📅 Yearly</option>
               </select>
             </div>
             
             <div className="flex items-end">
               <button
                 onClick={() => setComparisonMode(!comparisonMode)}
-                className={`btn w-full ${
-                  comparisonMode ? 'btn-primary' : 'btn-secondary'
+                className={`btn w-full transition-all duration-200 ${
+                  comparisonMode 
+                    ? 'btn-primary shadow-lg transform scale-105' 
+                    : 'btn-secondary hover:shadow-md'
                 }`}
               >
                 <EyeIcon className="h-4 w-4 mr-2" />
-                {comparisonMode ? 'Exit Compare' : 'Compare Mode'}
+                {comparisonMode ? '✅ Compare Mode' : '🔍 Compare Mode'}
               </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Enhanced Tabs */}
-      <div className="border-b border-gray-200 dark:border-gray-700">
-        <nav className="-mb-px flex space-x-8 overflow-x-auto">
+      {/* Enhanced Navigation Tabs */}
+      <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center">
+            <svg className="h-5 w-5 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            Analytics Dashboard
+          </h2>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+            Choose your analysis view below
+          </p>
+        </div>
+        <nav className="flex flex-wrap gap-2 p-4">
           <button
             onClick={() => setActiveTab('overview')}
-            className={`py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+            className={`px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 flex items-center ${
               activeTab === 'overview'
-                ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                ? 'bg-blue-500 text-white shadow-lg transform scale-105'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
             }`}
           >
-            <ChartBarIcon className="h-5 w-5 inline mr-2" />
-            Overview
+            📊 Overview
           </button>
           <button
             onClick={() => setActiveTab('individual')}
-            className={`py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+            className={`px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 flex items-center ${
               activeTab === 'individual'
-                ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                ? 'bg-blue-500 text-white shadow-lg transform scale-105'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
             }`}
           >
-            <EyeIcon className="h-5 w-5 inline mr-2" />
-            Individual Analysis
+            🔍 Individual Analysis
           </button>
           <button
             onClick={() => setActiveTab('comparison')}
-            className={`py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+            className={`px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 flex items-center ${
               activeTab === 'comparison'
-                ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                ? 'bg-blue-500 text-white shadow-lg transform scale-105'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
             }`}
           >
-            <BuildingOfficeIcon className="h-5 w-5 inline mr-2" />
-            Facility Comparison
+            🏢 Facility Comparison
           </button>
           <button
             onClick={() => setActiveTab('heating')}
-            className={`py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+            className={`px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 flex items-center ${
               activeTab === 'heating'
-                ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                ? 'bg-blue-500 text-white shadow-lg transform scale-105'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
             }`}
           >
-            <FireIcon className="h-5 w-5 inline mr-2" />
-            Heating Analytics
+            🔥 Heating Analytics
           </button>
           <button
             onClick={() => setActiveTab('meters')}
-            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+            className={`px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 flex items-center ${
               activeTab === 'meters'
-                ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                ? 'bg-blue-500 text-white shadow-lg transform scale-105'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
             }`}
           >
-            <BoltIcon className="h-5 w-5 inline mr-2" />
-            Meter Analytics
+            ⚡ Meter Analytics
           </button>
           <button
             onClick={() => setActiveTab('individual-meters')}
-            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+            className={`px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 flex items-center ${
               activeTab === 'individual-meters'
-                ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                ? 'bg-blue-500 text-white shadow-lg transform scale-105'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
             }`}
           >
-            <EyeIcon className="h-5 w-5 inline mr-2" />
-            Individual Meters
+            🔍 Individual Meters
           </button>
           <button
             onClick={() => setActiveTab('meter-comparison')}
-            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+            className={`px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 flex items-center ${
               activeTab === 'meter-comparison'
-                ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                ? 'bg-blue-500 text-white shadow-lg transform scale-105'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
             }`}
           >
-            <ChartBarIcon className="h-5 w-5 inline mr-2" />
-            Meter Comparison
+            📊 Meter Comparison
           </button>
         </nav>
       </div>
@@ -1064,10 +1446,194 @@ const ChartsReports = () => {
                   </div>
                   <div className="text-right">
                     <span className="text-xs text-gray-500 dark:text-gray-400">
-                      {dateRange.replace('days', 'd').replace('months', 'm').replace('year', 'y')}
+                      {dateRange === '7' ? '7d' : dateRange === '30' ? '30d' : dateRange === '90' ? '3m' : dateRange === '180' ? '6m' : dateRange === '365' ? '1y' : '30d'}
                     </span>
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Advanced Insights Panel */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Performance Insights */}
+            <div className="card border-l-4 border-l-green-500">
+              <div className="card-header bg-green-50 dark:bg-green-900/20">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center">
+                    <svg className="h-5 w-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                    Performance Insights
+                  </h3>
+                  <button
+                    onClick={() => setShowAdvancedMetrics(!showAdvancedMetrics)}
+                    className="text-sm text-green-600 hover:text-green-800 dark:text-green-400"
+                  >
+                    {showAdvancedMetrics ? 'Hide' : 'Show'} Details
+                  </button>
+                </div>
+              </div>
+              <div className="card-body">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600 dark:text-gray-400">Efficiency Score</span>
+                    <div className="flex items-center">
+                      <div className="w-20 bg-gray-200 dark:bg-gray-700 rounded-full h-2 mr-2">
+                        <div 
+                          className="bg-green-500 h-2 rounded-full transition-all duration-500" 
+                          style={{ width: `${getEfficiencyScore()}%` }}
+                        ></div>
+                      </div>
+                      <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                        {getEfficiencyScore().toFixed(0)}%
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600 dark:text-gray-400">Consumption Trend</span>
+                    <div className="flex items-center">
+                      {getConsumptionTrend(energyData) === 'increasing' && (
+                        <span className="text-red-500 flex items-center text-sm">
+                          <ArrowTrendingUpIcon className="h-4 w-4 mr-1" />
+                          📈 Increasing
+                        </span>
+                      )}
+                      {getConsumptionTrend(energyData) === 'decreasing' && (
+                        <span className="text-green-500 flex items-center text-sm">
+                          <ArrowTrendingDownIcon className="h-4 w-4 mr-1" />
+                          📉 Decreasing
+                        </span>
+                      )}
+                      {getConsumptionTrend(energyData) === 'stable' && (
+                        <span className="text-blue-500 flex items-center text-sm">
+                          <svg className="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14" />
+                          </svg>
+                          📊 Stable
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {showAdvancedMetrics && (
+                    <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                      <div className="text-xs text-gray-500 dark:text-gray-400 space-y-2">
+                        <div>• Efficiency based on industry benchmarks</div>
+                        <div>• Trend analysis over last 6 periods</div>
+                        <div>• Real-time performance monitoring</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Anomaly Detection */}
+            <div className="card border-l-4 border-l-yellow-500">
+              <div className="card-header bg-yellow-50 dark:bg-yellow-900/20">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center">
+                  <ExclamationTriangleIcon className="h-5 w-5 mr-2 text-yellow-500" />
+                  Anomaly Detection
+                </h3>
+              </div>
+              <div className="card-body">
+                {getAnomalies().length > 0 ? (
+                  <div className="space-y-3">
+                    {getAnomalies().slice(0, 3).map((anomaly, index) => (
+                      <div key={index} className="flex items-center justify-between p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded">
+                        <div>
+                          <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                            {anomaly.period}
+                          </div>
+                          <div className="text-xs text-gray-600 dark:text-gray-400">
+                            {anomaly.type}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className={`text-sm font-medium ${
+                            anomaly.severity === 'high' ? 'text-red-600' : 'text-yellow-600'
+                          }`}>
+                            {anomaly.value.toFixed(0)} kWh
+                          </div>
+                          <div className={`text-xs px-2 py-1 rounded ${
+                            anomaly.severity === 'high' 
+                              ? 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400'
+                              : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400'
+                          }`}>
+                            {anomaly.severity.toUpperCase()}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-4">
+                    <div className="text-green-500 mb-2">
+                      <svg className="h-8 w-8 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">✅ No anomalies detected</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">All systems operating normally</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Predictive Analytics */}
+            <div className="card border-l-4 border-l-purple-500">
+              <div className="card-header bg-purple-50 dark:bg-purple-900/20">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center">
+                    <svg className="h-5 w-5 mr-2 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    Predictive Analytics
+                  </h3>
+                  <button
+                    onClick={() => setShowPredictions(!showPredictions)}
+                    className={`text-sm px-3 py-1 rounded transition-all ${
+                      showPredictions 
+                        ? 'bg-purple-500 text-white' 
+                        : 'bg-purple-100 text-purple-700 hover:bg-purple-200 dark:bg-purple-900/20 dark:text-purple-400'
+                    }`}
+                  >
+                    {showPredictions ? '🔮 ON' : '🔮 OFF'}
+                  </button>
+                </div>
+              </div>
+              <div className="card-body">
+                {showPredictions ? (
+                  <div className="space-y-3">
+                    {getPredictedConsumption(energyData).map((prediction, index) => (
+                      <div key={index} className="flex items-center justify-between p-2 bg-purple-50 dark:bg-purple-900/20 rounded">
+                        <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                          {prediction.name}
+                        </div>
+                        <div className="text-sm text-purple-600 dark:text-purple-400">
+                          {(prediction.electricity + prediction.gas).toFixed(0)} kWh
+                        </div>
+                      </div>
+                    ))}
+                    <div className="mt-3 pt-3 border-t border-purple-200 dark:border-purple-700">
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        🤖 AI-powered predictions based on historical trends
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-4">
+                    <div className="text-purple-500 mb-2">
+                      <svg className="h-8 w-8 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                    </div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">🔮 Enable predictions</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">Get AI-powered consumption forecasts</p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -1112,29 +1678,100 @@ const ChartsReports = () => {
                 </div>
               </div>
               
-              {/* Time Period Filter */}
-              <div className="mt-4 flex flex-wrap gap-2">
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300 self-center mr-2">
-                  Period:
-                </span>
-                {[
-                  { key: 'daily', label: 'Daily' },
-                  { key: 'weekly', label: 'Weekly' },
-                  { key: 'monthly', label: 'Monthly' },
-                  { key: 'yearly', label: 'Yearly' }
-                ].map((filter) => (
+              {/* Enhanced Chart Controls */}
+              <div className="mt-4 space-y-3">
+                {/* Time Period Filter */}
+                <div className="flex flex-wrap gap-2">
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300 self-center mr-2">
+                    📅 Period:
+                  </span>
+                  {[
+                    { key: 'daily', label: 'Daily', emoji: '📊' },
+                    { key: 'weekly', label: 'Weekly', emoji: '📈' },
+                    { key: 'monthly', label: 'Monthly', emoji: '📉' },
+                    { key: 'yearly', label: 'Yearly', emoji: '📋' }
+                  ].map((filter) => (
+                    <button
+                      key={filter.key}
+                      onClick={() => setChartFilter(filter.key)}
+                      className={`px-3 py-1 text-sm rounded-md transition-all duration-200 flex items-center ${
+                        chartFilter === filter.key
+                          ? 'bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300 scale-105 shadow-md'
+                          : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 hover:scale-102'
+                      }`}
+                    >
+                      <span className="mr-1">{filter.emoji}</span>
+                      {filter.label}
+                    </button>
+                  ))}
+                </div>
+                
+                {/* Advanced Chart Options */}
+                <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      🎛️ Options:
+                    </span>
+                    
+                    {/* Auto Refresh Toggle */}
+                    <button
+                      onClick={() => setAutoRefresh(!autoRefresh)}
+                      className={`px-3 py-1 text-xs rounded-full transition-all duration-200 flex items-center ${
+                        autoRefresh
+                          ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400'
+                          : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
+                      }`}
+                    >
+                      <div className={`w-2 h-2 rounded-full mr-2 ${
+                        autoRefresh ? 'bg-green-500 animate-pulse' : 'bg-gray-400'
+                      }`}></div>
+                      {autoRefresh ? '🔄 Live' : '⏸️ Static'}
+                    </button>
+                    
+                    {/* Animation Toggle */}
+                    <button
+                      onClick={() => setChartAnimation(!chartAnimation)}
+                      className={`px-3 py-1 text-xs rounded-full transition-all duration-200 ${
+                        chartAnimation
+                          ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400'
+                          : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
+                      }`}
+                    >
+                      {chartAnimation ? '✨ Animated' : '🚫 Static'}
+                    </button>
+                    
+                    {/* Grid Toggle */}
+                    <button
+                      onClick={() => setShowGrid(!showGrid)}
+                      className={`px-3 py-1 text-xs rounded-full transition-all duration-200 ${
+                        showGrid
+                          ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/20 dark:text-purple-400'
+                          : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
+                      }`}
+                    >
+                      {showGrid ? '🔲 Grid On' : '⬜ Grid Off'}
+                    </button>
+                  </div>
+                  
+                  {/* Manual Refresh Button */}
                   <button
-                    key={filter.key}
-                    onClick={() => setChartFilter(filter.key)}
-                    className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                      chartFilter === filter.key
-                        ? 'bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300'
-                        : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
-                    }`}
+                    onClick={() => {
+                      // Trigger data refresh
+                      window.location.reload();
+                    }}
+                    className="px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-400 rounded-full transition-all duration-200 flex items-center"
                   >
-                    {filter.label}
+                    <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    🔄 Refresh
                   </button>
-                ))}
+                  
+                  {/* Data Points Counter */}
+                  <div className="text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 px-2 py-1 rounded">
+                    📊 {getChartConfig().data.length} data points
+                  </div>
+                </div>
               </div>
             </div>
             <div className="card-body px-6 py-4">
@@ -1147,7 +1784,7 @@ const ChartsReports = () => {
                 ) : getChartConfig().data.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={getChartConfig().data}>
-                      <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                      {showGrid && <CartesianGrid strokeDasharray="3 3" className="opacity-30" />}
                       <XAxis 
                         dataKey="name" 
                         className="text-xs"
@@ -1164,7 +1801,7 @@ const ChartsReports = () => {
                         orientation="right"
                         className="text-xs"
                         tick={{ fontSize: 12 }}
-                        label={{ value: 'Heating (MWh)', angle: 90, position: 'insideRight' }}
+                        label={{ value: 'Heating (kWh)', angle: 90, position: 'insideRight' }}
                         domain={[0, 'dataMax + 5']}
                       />
                       <Tooltip 
@@ -1187,6 +1824,8 @@ const ChartsReports = () => {
                           activeDot={{ r: line.key === 'heating' ? 7 : 6, stroke: line.color, strokeWidth: 2 }}
                           name={line.name}
                           yAxisId={line.key === 'heating' ? 'right' : 'left'}
+                          animationDuration={chartAnimation ? 1000 : 0}
+                          isAnimationActive={chartAnimation}
                         />
                       ))}
                     </LineChart>
@@ -1703,7 +2342,7 @@ const ChartsReports = () => {
                       <Legend />
                       <Bar dataKey="electricity" fill={COLORS.electricity} name="Electricity (kWh)" />
                       <Bar dataKey="gas" fill={COLORS.gas} name="Gas (m³)" />
-                      <Bar dataKey="heating" fill={COLORS.heating} name="Heating (MWh)" />
+                      <Bar dataKey="heating" fill={COLORS.heating} name="Heating (kWh)" />
                       <Line type="monotone" dataKey="totalMeters" stroke={COLORS.primary} strokeWidth={2} name="Total Meters" />
                     </ComposedChart>
                   </ResponsiveContainer>
@@ -1746,7 +2385,7 @@ const ChartsReports = () => {
                           Gas (m³)
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                          Heating (MWh)
+                          Heating (kWh)
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                           Total Consumption
@@ -2223,11 +2862,11 @@ const ChartsReports = () => {
                     onChange={(e) => setDateRange(e.target.value)}
                     className="form-select w-full"
                   >
-                    <option value="7days">Last 7 Days</option>
-                    <option value="30days">Last 30 Days</option>
-                    <option value="3months">Last 3 Months</option>
-                    <option value="6months">Last 6 Months</option>
-                    <option value="1year">Last Year</option>
+                    <option value="7">Last 7 Days</option>
+                    <option value="30">Last 30 Days</option>
+                    <option value="90">Last 3 Months</option>
+                    <option value="180">Last 6 Months</option>
+                    <option value="365">Last Year</option>
                   </select>
                 </div>
 

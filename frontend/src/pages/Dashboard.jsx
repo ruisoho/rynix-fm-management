@@ -577,7 +577,7 @@ const Dashboard = () => {
         lines: [
           { key: 'electricity', color: '#3B82F6', name: 'Electricity (kWh)' },
           { key: 'gas', color: '#F59E0B', name: 'Gas (m³)' },
-          { key: 'heating', color: '#EF4444', name: 'Heating (MWh)' }
+          { key: 'heating', color: '#EF4444', name: 'Heating (kWh)' }
         ]
       },
       electricity: {
@@ -593,7 +593,7 @@ const Dashboard = () => {
       heating: {
           title: 'Heating Usage',
           data: energyData,
-          lines: [{ key: 'heating', color: '#EF4444', name: 'Heating (MWh)' }]
+          lines: [{ key: 'heating', color: '#EF4444', name: 'Heating (kWh)' }]
         }
     };
     return configs[selectedChart] || configs.energy;
@@ -1031,7 +1031,7 @@ const Dashboard = () => {
                     orientation="right"
                     className="text-xs"
                     tick={{ fontSize: 12 }}
-                    label={{ value: 'Heating (MWh)', angle: 90, position: 'insideRight' }}
+                    label={{ value: 'Heating (kWh)', angle: 90, position: 'insideRight' }}
                     domain={[0, 'dataMax + 5']}
                   />
                   <Tooltip 
@@ -1074,9 +1074,22 @@ const Dashboard = () => {
           <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
             {!energyLoading && energyData.length > 0 && getChartConfig().lines.map((line) => {
               const data = getChartConfig().data;
-              const total = data.reduce((sum, item) => sum + (item[line.key] || 0), 0);
-              const average = Math.round(total / data.length);
-              const latest = data[data.length - 1]?.[line.key] || 0;
+              
+              // Calculate proper consumption totals by summing daily usage differences
+              // For electricity, this represents the actual daily consumption from all electric meters
+              let total, average, latest;
+              
+              if (line.key === 'electricity') {
+                // Sum all daily electricity consumption values (already calculated as differences)
+                total = data.reduce((sum, item) => sum + (item[line.key] || 0), 0);
+                average = data.length > 0 ? Math.round(total / data.length) : 0;
+                latest = data[data.length - 1]?.[line.key] || 0;
+              } else {
+                // For gas and heating, use the same logic
+                total = data.reduce((sum, item) => sum + (item[line.key] || 0), 0);
+                average = data.length > 0 ? Math.round(total / data.length) : 0;
+                latest = data[data.length - 1]?.[line.key] || 0;
+              }
               
               return (
                 <div key={line.key} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">

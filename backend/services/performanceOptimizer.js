@@ -207,25 +207,29 @@ class PerformanceOptimizer {
           em.type,
           em.id as meter_id,
           (
-            WITH ordered_readings AS (
-              SELECT 
-                mr2.value,
-                LAG(mr2.value) OVER (ORDER BY mr2.date) as prev_value,
-                ROW_NUMBER() OVER (ORDER BY mr2.date) as row_num
-              FROM meter_readings mr2 
-              WHERE mr2.meter_id = em.id 
-                AND strftime('%Y-%m', mr2.date) = strftime('%Y-%m', mr.date)
-                AND mr2.value IS NOT NULL
-              ORDER BY mr2.date
+            SELECT COALESCE(
+              CASE 
+                WHEN current_reading.value IS NOT NULL AND prev_reading.value IS NOT NULL
+                THEN CASE WHEN (current_reading.value - prev_reading.value) > 0 
+                     THEN (current_reading.value - prev_reading.value) 
+                     ELSE 0 END
+                ELSE 0
+              END
+            , 0)
+            FROM meter_readings current_reading
+            LEFT JOIN meter_readings prev_reading ON (
+              prev_reading.meter_id = current_reading.meter_id 
+              AND prev_reading.date = (
+                SELECT MAX(mr3.date) 
+                FROM meter_readings mr3 
+                WHERE mr3.meter_id = current_reading.meter_id 
+                  AND mr3.date < current_reading.date 
+                  AND mr3.value IS NOT NULL
+              )
             )
-            SELECT COALESCE(SUM(
-               CASE 
-                 WHEN row_num > 1 AND prev_value IS NOT NULL 
-                 THEN CASE WHEN (value - prev_value) > 0 THEN (value - prev_value) ELSE 0 END
-                 ELSE 0
-               END
-             ), 0)
-            FROM ordered_readings
+            WHERE current_reading.meter_id = em.id
+              AND current_reading.date = mr.date
+              AND current_reading.value IS NOT NULL
           ) as consumption
         FROM electric_meters em
         INNER JOIN meter_readings mr ON em.id = mr.meter_id
@@ -246,7 +250,7 @@ class PerformanceOptimizer {
                 ROW_NUMBER() OVER (ORDER BY hr2.date) as row_num
               FROM heating_readings hr2 
               WHERE hr2.heating_id = hs.id 
-                AND strftime('%Y-%m', hr2.date) = strftime('%Y-%m', hr.date)
+                AND hr2.date <= hr.date
                 AND hr2.value IS NOT NULL
               ORDER BY hr2.date
             )
@@ -319,8 +323,8 @@ class PerformanceOptimizer {
       } else if (row.type === 'gas') {
         groupedData[row.period].gas = Math.max(0, row.total_consumption || 0);
       } else if (row.type === 'heating') {
-        // Convert heating from kWh to MWh by dividing by 1000
-        groupedData[row.period].heating = Math.max(0, (row.total_consumption || 0) / 1000);
+        // Keep heating in kWh (no conversion needed)
+        groupedData[row.period].heating = Math.max(0, row.total_consumption || 0);
       }
     });
     

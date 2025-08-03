@@ -19,10 +19,25 @@ import {
   FunnelIcon,
   XCircleIcon,
   CheckCircleIcon,
-  ClockIcon
+  ClockIcon,
+  TableCellsIcon
 } from '@heroicons/react/24/outline';
 import { useApi } from '../contexts/ApiContext';
 import { format, isAfter, parseISO } from 'date-fns';
+import {
+  LineChart,
+  Line,
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer
+} from 'recharts';
 
 const Meters = () => {
   const { 
@@ -57,6 +72,7 @@ const Meters = () => {
   const [selectedMeter, setSelectedMeter] = useState(null);
   const [readings, setReadings] = useState([]);
   const [filter, setFilter] = useState('all');
+  const [readingsViewMode, setReadingsViewMode] = useState('table'); // 'table' or 'chart'
   
   // Enhanced search and filtering state
   const [searchQuery, setSearchQuery] = useState('');
@@ -116,7 +132,17 @@ const Meters = () => {
     notes: ''
   });
 
+  const [isDataLoaded, setIsDataLoaded] = useState(false);
+  const [lastFetchTime, setLastFetchTime] = useState(0);
+  
   const fetchData = useCallback(async () => {
+    // Debounce mechanism - prevent calls within 1 second
+    const now = Date.now();
+    if (now - lastFetchTime < 1000) {
+      return;
+    }
+    setLastFetchTime(now);
+    
     try {
       const [metersData, heatingData, facilitiesData] = await Promise.all([
         getMeters(),
@@ -130,20 +156,20 @@ const Meters = () => {
       const gasFiltered = allMeters.filter(meter => meter.type === 'gas');
       const heatingFiltered = Array.isArray(heatingData) ? heatingData : [];
       
-
-      
       setElectricMeters(electricFiltered);
       setGasMeters(gasFiltered);
       setHeatingMeters(heatingFiltered);
       setFacilities(Array.isArray(facilitiesData) ? facilitiesData : []);
+      setIsDataLoaded(true);
     } catch (err) {
       console.error('Failed to fetch data:', err);
       setElectricMeters([]);
       setGasMeters([]);
       setHeatingMeters([]);
       setFacilities([]);
+      setIsDataLoaded(true);
     }
-  }, [getMeters, getHeating, getFacilities]);
+  }, [getMeters, getHeating, getFacilities, lastFetchTime]);
 
   useEffect(() => {
     fetchData();
@@ -159,21 +185,8 @@ const Meters = () => {
     }
   }, [fetchData]);
   
-  // Add a separate effect to ensure data is loaded
-  useEffect(() => {
-    if (electricMeters.length === 0 && gasMeters.length === 0 && heatingMeters.length === 0) {
-      console.log('No meters loaded, retrying...');
-      fetchData();
-    }
-  }, [electricMeters, gasMeters, heatingMeters, fetchData]);
-  
-  // Force refresh heating data when switching to heating tab
-  useEffect(() => {
-    if (activeTab === 'heating' && heatingMeters.length === 0) {
-      console.log('Heating tab selected but no heating meters, refreshing...');
-      fetchData();
-    }
-  }, [activeTab, heatingMeters.length, fetchData]);
+  // Removed problematic useEffect hooks that were causing infinite API calls
+  // Data will be fetched once on mount and when user manually refreshes
 
   const handleElectricSubmit = async (e) => {
     e.preventDefault();
@@ -479,7 +492,7 @@ const Meters = () => {
       trend,
       consumption: Math.abs(consumption),
       readingCount: mockReadings.length,
-      unit: activeTab === 'electric' ? 'kWh' : activeTab === 'gas' ? 'm³' : 'MWh'
+      unit: activeTab === 'electric' ? 'kWh' : activeTab === 'gas' ? 'm³' : 'kWh'
     };
   };
   
@@ -618,6 +631,29 @@ const Meters = () => {
       broken: currentMeters.filter(meter => meter.status === 'broken').length,
       maintenance: currentMeters.filter(meter => meter.status === 'maintenance').length
     };
+  };
+
+  // Prepare chart data from readings
+  const prepareChartData = (readings) => {
+    if (!readings || readings.length === 0) return [];
+    
+    // Sort readings by date (oldest first)
+    const sortedReadings = [...readings].sort((a, b) => new Date(a.date) - new Date(b.date));
+    
+    return sortedReadings.map((reading, index) => {
+      const previousReading = sortedReadings[index - 1];
+      const usage = previousReading 
+        ? parseFloat(reading.value) - parseFloat(previousReading.value)
+        : 0;
+      
+      return {
+        date: format(new Date(reading.date), 'MMM dd'),
+        fullDate: format(new Date(reading.date), 'MMM dd, yyyy'),
+        reading: parseFloat(reading.value),
+        usage: Math.max(0, usage), // Ensure non-negative usage
+        notes: reading.notes || ''
+      };
+    });
   };
 
   // Drag and drop handlers
@@ -1324,7 +1360,7 @@ const Meters = () => {
             
             {activeTab === 'electric' && (
               <form onSubmit={handleElectricSubmit}>
-                <div className="modal-body">
+                <div className="modal-body flex-1 overflow-y-auto">
                   <div className="form-group">
                     <label className="form-label">Facility</label>
                     <select
@@ -1981,51 +2017,246 @@ const Meters = () => {
       {/* Readings History Modal */}
       {showReadingsModal && selectedMeter && (
         <div className="modal-overlay">
-          <div className="modal-content modal-large">
+          <div className="modal-content modal-fullscreen">
             <div className="modal-header">
               <h3 className="modal-title">Reading History - {selectedMeter.serial_number}</h3>
-              <button
-                onClick={() => {
-                  setShowReadingsModal(false);
-                  setSelectedMeter(null);
-                  setReadings([]);
-                }}
-                className="modal-close"
-              >
-                ×
-              </button>
+              <div className="flex items-center gap-2">
+                <div className="btn-group">
+                  <button
+                    onClick={() => setReadingsViewMode('table')}
+                    className={`btn btn-sm ${
+                      readingsViewMode === 'table' ? 'btn-primary' : 'btn-secondary'
+                    }`}
+                  >
+                    <TableCellsIcon className="w-4 h-4 mr-1" />
+                    Table
+                  </button>
+                  <button
+                    onClick={() => setReadingsViewMode('chart')}
+                    className={`btn btn-sm ${
+                      readingsViewMode === 'chart' ? 'btn-primary' : 'btn-secondary'
+                    }`}
+                  >
+                    <ChartBarIcon className="w-4 h-4 mr-1" />
+                    Chart
+                  </button>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowReadingsModal(false);
+                    setSelectedMeter(null);
+                    setReadings([]);
+                    setReadingsViewMode('table');
+                  }}
+                  className="modal-close"
+                >
+                  ×
+                </button>
+              </div>
             </div>
             
-            <div className="modal-body">
+            <div className="modal-body flex-1 overflow-y-auto">
               {readings.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="table">
-                    <thead>
-                      <tr>
-                        <th>Date</th>
-                        <th>Reading</th>
-                        <th>Usage</th>
-                        <th>Notes</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {readings.map((reading, index) => {
-                        const previousReading = readings[index + 1];
-                        const usage = previousReading 
-                          ? (parseFloat(reading.value) - parseFloat(previousReading.value)).toFixed(2)
-                          : '-';
-                        
-                        return (
-                          <tr key={reading.id}>
-                            <td>{formatDate(reading.date)}</td>
-                            <td>{reading.value}</td>
-                            <td>{usage}</td>
-                            <td>{reading.notes || '-'}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                <div>
+                  {readingsViewMode === 'table' ? (
+                    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                          <thead className="bg-gray-50 dark:bg-gray-900">
+                            <tr>
+                              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                                <div className="flex items-center space-x-1">
+                                  <CalendarIcon className="w-4 h-4" />
+                                  <span>Date</span>
+                                </div>
+                              </th>
+                              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                                <div className="flex items-center space-x-1">
+                                  <ChartBarIcon className="w-4 h-4" />
+                                  <span>Reading ({selectedMeter.type === 'electric' ? 'kWh' : 'units'})</span>
+                                </div>
+                              </th>
+                              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                                <div className="flex items-center space-x-1">
+                                  <BoltIcon className="w-4 h-4" />
+                                  <span>Usage ({selectedMeter.type === 'electric' ? 'kWh' : 'units'})</span>
+                                </div>
+                              </th>
+                              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                                <div className="flex items-center space-x-1">
+                                  <DocumentTextIcon className="w-4 h-4" />
+                                  <span>Notes</span>
+                                </div>
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                            {readings.map((reading, index) => {
+                              const previousReading = readings[index + 1];
+                              const usage = previousReading 
+                                ? parseFloat(reading.value) - parseFloat(previousReading.value)
+                                : 0;
+                              const usageDisplay = usage > 0 ? usage.toFixed(2) : '-';
+                              const isHighUsage = usage > 0 && previousReading && usage > (parseFloat(previousReading.value) * 0.1);
+                              
+                              return (
+                                <tr key={reading.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150">
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                                      {formatDate(reading.date)}
+                                    </div>
+                                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                                      {format(new Date(reading.date), 'EEEE')}
+                                    </div>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                    <div className="text-sm font-mono font-semibold text-gray-900 dark:text-gray-100">
+                                      {parseFloat(reading.value).toLocaleString()}
+                                    </div>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                    {usage > 0 ? (
+                                      <div className="flex items-center space-x-2">
+                                        <span className={`text-sm font-mono font-semibold ${
+                                          isHighUsage 
+                                            ? 'text-red-600 dark:text-red-400' 
+                                            : 'text-green-600 dark:text-green-400'
+                                        }`}>
+                                          {usageDisplay}
+                                        </span>
+                                        {isHighUsage && (
+                                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+                                            High
+                                          </span>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <span className="text-sm text-gray-400 dark:text-gray-500">-</span>
+                                    )}
+                                  </td>
+                                  <td className="px-6 py-4">
+                                    <div className="text-sm text-gray-600 dark:text-gray-300 max-w-xs truncate" title={reading.notes || 'No notes'}>
+                                      {reading.notes || (
+                                        <span className="text-gray-400 dark:text-gray-500 italic">No notes</span>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      
+                      {/* Table Footer with Summary */}
+                      <div className="bg-gray-50 dark:bg-gray-900 px-6 py-4 border-t border-gray-200 dark:border-gray-700">
+                        <div className="flex flex-wrap items-center justify-between text-sm text-gray-600 dark:text-gray-300">
+                          <div className="flex items-center space-x-4">
+                            <span>Total Readings: <strong>{readings.length}</strong></span>
+                            <span>Latest: <strong>{readings.length > 0 ? parseFloat(readings[0].value).toLocaleString() : 'N/A'}</strong></span>
+                          </div>
+                          <div className="flex items-center space-x-4 mt-2 sm:mt-0">
+                            <span>Total Usage: <strong>
+                              {readings.length > 1 
+                                ? (parseFloat(readings[0].value) - parseFloat(readings[readings.length - 1].value)).toFixed(2)
+                                : 'N/A'
+                              } {selectedMeter.type === 'electric' ? 'kWh' : 'units'}
+                            </strong></span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      {/* Usage Chart */}
+                       <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+                         <h4 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Usage Over Time</h4>
+                         <div className="h-96">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={prepareChartData(readings)}>
+                              <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                              <XAxis 
+                                dataKey="date" 
+                                className="text-xs"
+                                tick={{ fontSize: 12 }}
+                              />
+                              <YAxis 
+                                className="text-xs"
+                                tick={{ fontSize: 12 }}
+                              />
+                              <Tooltip 
+                                labelFormatter={(value, payload) => {
+                                  const data = payload?.[0]?.payload;
+                                  return data?.fullDate || value;
+                                }}
+                                formatter={(value, name) => [
+                                  `${value.toFixed(2)} ${selectedMeter.type === 'electric' ? 'kWh' : 'units'}`,
+                                  name === 'usage' ? 'Usage' : 'Reading'
+                                ]}
+                                contentStyle={{
+                                  backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                                  border: '1px solid #e5e7eb',
+                                  borderRadius: '8px'
+                                }}
+                              />
+                              <Area
+                                type="monotone"
+                                dataKey="usage"
+                                stroke="#3b82f6"
+                                fill="#3b82f6"
+                                fillOpacity={0.3}
+                                strokeWidth={2}
+                              />
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+
+                      {/* Readings Chart */}
+                       <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+                         <h4 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Cumulative Readings</h4>
+                         <div className="h-96">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={prepareChartData(readings)}>
+                              <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                              <XAxis 
+                                dataKey="date" 
+                                className="text-xs"
+                                tick={{ fontSize: 12 }}
+                              />
+                              <YAxis 
+                                className="text-xs"
+                                tick={{ fontSize: 12 }}
+                              />
+                              <Tooltip 
+                                labelFormatter={(value, payload) => {
+                                  const data = payload?.[0]?.payload;
+                                  return data?.fullDate || value;
+                                }}
+                                formatter={(value, name) => [
+                                  `${value.toFixed(2)} ${selectedMeter.type === 'electric' ? 'kWh' : 'units'}`,
+                                  'Reading'
+                                ]}
+                                contentStyle={{
+                                  backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                                  border: '1px solid #e5e7eb',
+                                  borderRadius: '8px'
+                                }}
+                              />
+                              <Line
+                                type="monotone"
+                                dataKey="reading"
+                                stroke="#10b981"
+                                strokeWidth={2}
+                                dot={{ fill: '#10b981', strokeWidth: 2, r: 4 }}
+                                activeDot={{ r: 6, stroke: '#10b981', strokeWidth: 2 }}
+                              />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="empty-state">
@@ -2044,6 +2275,7 @@ const Meters = () => {
                   setShowReadingsModal(false);
                   setSelectedMeter(null);
                   setReadings([]);
+                  setReadingsViewMode('table');
                 }}
                 className="btn btn-secondary"
               >
