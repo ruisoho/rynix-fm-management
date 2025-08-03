@@ -34,11 +34,11 @@ const Sidebar = ({ onNavigate }) => {
           </div>
           <div className="ml-3">
             <h1 className="text-lg font-semibold text-light-text dark:text-dark-text">
-              Facility Manager
+              Rynix FM
             </h1>
             <p className="text-xs text-light-text-secondary dark:text-dark-text-secondary">
-              Offline-first management
-            </p>
+                Facility Management
+              </p>
           </div>
         </div>
       </div>
@@ -69,14 +69,14 @@ const Sidebar = ({ onNavigate }) => {
       <div className="flex-shrink-0 px-4 py-4 border-t border-light-border dark:border-dark-border">
         <div className="text-xs text-light-text-secondary dark:text-dark-text-secondary">
           <div className="flex items-center justify-between mb-1">
-            <span>Version 1.0.0</span>
+            <span>Version 1.1.0</span>
             <div className="flex items-center">
               <div className="w-2 h-2 bg-green-400 rounded-full mr-1"></div>
               <span>Online</span>
             </div>
           </div>
           <div className="text-center">
-            <p>© 2024 Facility Manager</p>
+            <p>© 2025 Rynix FM</p>
           </div>
         </div>
       </div>

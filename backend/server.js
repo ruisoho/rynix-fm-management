@@ -7,6 +7,17 @@ const bcrypt = require('bcrypt');
 const multer = require('multer');
 const PerformanceOptimizer = require('./services/performanceOptimizer');
 const DataArchiver = require('./services/dataArchiver');
+const {
+  dashboardCache,
+  meterCache,
+  facilityCache,
+  heatingCache,
+  invalidateMeters,
+  invalidateFacilities,
+  invalidateHeating,
+  invalidateMaintenance,
+  invalidateTasks
+} = require('./middleware/cacheMiddleware');
 require('dotenv').config();
 
 // Configure multer for file uploads
@@ -248,7 +259,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // Dashboard endpoint - get summary data
-app.get('/api/dashboard', (req, res) => {
+app.get('/api/dashboard', dashboardCache, (req, res) => {
   const stats = {};
   let completed = 0;
   const total = 4;
@@ -334,7 +345,7 @@ app.get('/api/dashboard', (req, res) => {
 });
 
 // Facilities endpoints
-app.get('/api/facilities', (req, res) => {
+app.get('/api/facilities', facilityCache, (req, res) => {
   db.all('SELECT * FROM facilities ORDER BY name', (err, facilities) => {
     if (err) {
       console.error('Get facilities error:', err);
@@ -344,7 +355,7 @@ app.get('/api/facilities', (req, res) => {
   });
 });
 
-app.get('/api/facilities/:id', (req, res) => {
+app.get('/api/facilities/:id', facilityCache, (req, res) => {
   const { id } = req.params;
   
   db.get('SELECT * FROM facilities WHERE id = ?', [id], (err, facility) => {
@@ -1069,7 +1080,7 @@ app.delete('/api/tasks/:id', (req, res) => {
 });
 
 // Heating systems endpoints
-app.get('/api/heating', (req, res) => {
+app.get('/api/heating', heatingCache, (req, res) => {
   try {
     // Get heating meters from electric_meters table
     const heatingMetersQuery = `
@@ -1378,7 +1389,7 @@ app.post('/api/heating/:heatingId/readings', (req, res) => {
 });
 
 // Electric meters endpoints
-app.get('/api/meters', (req, res) => {
+app.get('/api/meters', meterCache, (req, res) => {
   db.all(`
     SELECT em.*, f.name as facility_name 
     FROM electric_meters em 
@@ -1393,7 +1404,7 @@ app.get('/api/meters', (req, res) => {
   });
 });
 
-app.post('/api/meters', (req, res) => {
+app.post('/api/meters', invalidateMeters, (req, res) => {
   const { facility_id, serial_number, type, location, installation_date, status } = req.body;
   if (!facility_id || !serial_number) {
     return res.status(400).json({ error: 'Facility ID and serial number are required' });

@@ -15,6 +15,7 @@ import Meters from './pages/Meters';
 import Settings from './pages/Settings';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { ApiProvider } from './contexts/ApiContext';
+import { UserProvider } from './contexts/UserContext';
 import './index.css';
 
 function App() {
@@ -58,7 +59,7 @@ function App() {
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
         <div className="text-center">
           <div className="spinner w-8 h-8 mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-400">Loading Facility Manager...</p>
+          <p className="text-gray-600 dark:text-gray-400">Loading Rynix FM...</p>
         </div>
       </div>
     );
@@ -86,7 +87,8 @@ function App() {
 
   return (
     <ThemeProvider>
-      <ApiProvider>
+      <UserProvider>
+        <ApiProvider>
         <Router
           future={{
             v7_startTransition: true,
@@ -112,7 +114,7 @@ function App() {
               }`}>
                 <div className="flex items-center justify-between h-16 px-4 border-b border-light-border dark:border-dark-border lg:hidden">
                   <h1 className="text-lg font-semibold text-light-text dark:text-dark-text">
-                    Facility Manager
+                    Rynix FM
                   </h1>
                   <button
                     onClick={() => setSidebarOpen(false)}
@@ -169,7 +171,8 @@ function App() {
             </div>
           </div>
         </Router>
-      </ApiProvider>
+        </ApiProvider>
+      </UserProvider>
     </ThemeProvider>
   );
 }

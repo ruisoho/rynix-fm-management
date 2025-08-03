@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   CogIcon,
   MoonIcon,
@@ -6,13 +6,25 @@ import {
   ComputerDesktopIcon,
   InformationCircleIcon,
   DocumentArrowDownIcon,
-  DocumentArrowUpIcon
+  DocumentArrowUpIcon,
+  UserIcon,
+  CheckIcon
 } from '@heroicons/react/24/outline';
 import { useTheme } from '../contexts/ThemeContext';
+import { useUser } from '../contexts/UserContext';
+import packageJson from '../../package.json';
 
 const Settings = () => {
   const { theme, setTheme, isDark } = useTheme();
+  const { user, updateUser } = useUser();
   const [activeTab, setActiveTab] = useState('general');
+  const [userName, setUserName] = useState(user.name);
+  const [isEditingName, setIsEditingName] = useState(false);
+
+  // Sync userName with user context when user changes
+  useEffect(() => {
+    setUserName(user.name);
+  }, [user.name]);
 
   const tabs = [
     { id: 'general', name: 'General', icon: CogIcon },
@@ -56,6 +68,18 @@ const Settings = () => {
     alert('Backup functionality would be implemented here');
   };
 
+  const handleSaveName = () => {
+    if (userName.trim()) {
+      updateUser({ name: userName.trim() });
+      setIsEditingName(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setUserName(user.name);
+    setIsEditingName(false);
+  };
+
   return (
     <div className="space-y-6">
       {/* Page header */}
@@ -95,6 +119,81 @@ const Settings = () => {
       <div className="space-y-6">
         {activeTab === 'general' && (
           <div className="space-y-6">
+            {/* User Profile */}
+            <div className="card">
+              <div className="card-header">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
+                  User Profile
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Manage your personal information
+                </p>
+              </div>
+              <div className="card-body">
+                <div className="flex items-center space-x-4">
+                  <div className="h-16 w-16 rounded-full bg-accent dark:bg-accent-dark flex items-center justify-center">
+                    <span className="text-xl font-medium text-white">
+                      {user.initials}
+                    </span>
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center space-x-3">
+                      {isEditingName ? (
+                        <div className="flex items-center space-x-2 flex-1">
+                          <input
+                            type="text"
+                            value={userName}
+                            onChange={(e) => setUserName(e.target.value)}
+                            className="form-input flex-1"
+                            placeholder="Enter your name"
+                            autoFocus
+                            onKeyPress={(e) => {
+                              if (e.key === 'Enter') {
+                                handleSaveName();
+                              } else if (e.key === 'Escape') {
+                                handleCancelEdit();
+                              }
+                            }}
+                          />
+                          <button
+                            onClick={handleSaveName}
+                            className="btn btn-primary btn-sm"
+                            disabled={!userName.trim()}
+                          >
+                            <CheckIcon className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={handleCancelEdit}
+                            className="btn btn-secondary btn-sm"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center space-x-3 flex-1">
+                          <div>
+                            <h4 className="text-lg font-medium text-gray-900 dark:text-gray-100">
+                              {user.name}
+                            </h4>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                              {user.role}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => setIsEditingName(true)}
+                            className="btn btn-secondary btn-sm"
+                          >
+                            <UserIcon className="h-4 w-4 mr-1" />
+                            Edit Name
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Theme settings */}
             <div className="card">
               <div className="card-header">
@@ -328,7 +427,7 @@ const Settings = () => {
             <div className="card">
               <div className="card-header">
                 <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
-                  About Facility Manager
+                  About Rynix FM
                 </h3>
               </div>
               <div className="card-body">
@@ -338,7 +437,7 @@ const Settings = () => {
                   </div>
                   <div>
                     <h4 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-                      Facility Manager
+                      Rynix FM
                     </h4>
                     <p className="text-gray-500 dark:text-gray-400">
                       Offline-first facility management desktop application
@@ -352,7 +451,7 @@ const Settings = () => {
                       Version
                     </dt>
                     <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
-                      1.0.0
+                      {packageJson.version}
                     </dd>
                   </div>
                   <div>

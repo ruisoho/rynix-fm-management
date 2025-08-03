@@ -1,8 +1,10 @@
 import React from 'react';
 import { Bars3Icon } from '@heroicons/react/24/outline';
 import ThemeToggle from './ThemeToggle';
+import { useUser } from '../contexts/UserContext';
 
 const Header = ({ onMenuClick, showMenuButton = false }) => {
+  const { user } = useUser();
 
   return (
     <header className="bg-light-card dark:bg-dark-card shadow-sm border-b border-light-border dark:border-dark-border transition-colors duration-300">
@@ -17,11 +19,7 @@ const Header = ({ onMenuClick, showMenuButton = false }) => {
             </button>
           )}
           
-          <div className="ml-4 lg:ml-0">
-            <h1 className="text-lg font-semibold text-light-text dark:text-dark-text">
-              Facility Manager
-            </h1>
-          </div>
+
         </div>
 
         <div className="flex items-center space-x-4">
@@ -32,15 +30,15 @@ const Header = ({ onMenuClick, showMenuButton = false }) => {
           <div className="flex items-center space-x-3">
             <div className="text-right hidden sm:block">
               <p className="text-sm font-medium text-light-text dark:text-dark-text">
-                Local User
+                {user.name}
               </p>
               <p className="text-xs text-light-text-secondary dark:text-dark-text-secondary">
-                Administrator
+                {user.role}
               </p>
             </div>
             <div className="h-8 w-8 rounded-full bg-accent dark:bg-accent-dark flex items-center justify-center">
               <span className="text-sm font-medium text-white">
-                U
+                {user.initials}
               </span>
             </div>
           </div>

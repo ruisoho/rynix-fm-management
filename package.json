@@ -1,7 +1,7 @@
 {
-  "name": "rynix-fm-management",
+  "name": "rynix-fm",
   "version": "1.1.0",
-  "description": "Rynix FM Management - Comprehensive web-based facility management application with energy monitoring",
+  "description": "Rynix FM - Comprehensive web-based facility management application with energy monitoring",
   "main": "backend/server.js",
   "homepage": "./",
   "scripts": {
@@ -26,6 +26,6 @@
     "multer": "^2.0.2",
     "sqlite3": "^5.1.6"
   },
-  "author": "Facility Manager Team",
+  "author": "Rynix FM Team",
   "license": "MIT"
 }
