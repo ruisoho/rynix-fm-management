@@ -1,4 +1,4 @@
-# Rynix FM Management - Version 1.1
+# Rynix FM - Version 1.1
 
 A comprehensive web-based facility management application built with React, Node.js, and SQLite.
 
@@ -18,6 +18,14 @@ A comprehensive web-based facility management application built with React, Node
 - Automated maintenance tasks
 - Archive/restore functionality
 - Enhanced monitoring endpoints
+
+### Recent UI Updates (Latest)
+- **Application Rebranding** - Changed from "Facility Manager" to "Rynix FM"
+- **Streamlined Dashboard** - Removed trend indicators for cleaner interface
+- **User Profile System** - Added editable user profiles in Settings
+- **Dynamic Versioning** - Version automatically reads from package.json
+- **Updated Copyright** - Changed to © 2025 Rynix FM
+- **Header Optimization** - Removed redundant title elements
 
 ---
 
@@ -46,8 +54,10 @@ A comprehensive web-based facility management application built with React, Node
 
 ### Technical Features
 - **Offline-first Architecture** - Works completely offline with local SQLite database
-- **Cross-platform Desktop App** - Runs on Windows, macOS, and Linux
+- **Web-based Application** - Runs in modern web browsers
 - **Modern UI** - React with Tailwind CSS and dark/light theme support
+- **User Profile Management** - Customizable user settings and preferences
+- **Dynamic Version Display** - Automatically shows current version from package.json
 - **Real-time Data** - All modules communicate through single local database
 - **Data Export/Import** - Backup and restore functionality
 - **Responsive Design** - Works on different screen sizes
@@ -64,7 +74,7 @@ A comprehensive web-based facility management application built with React, Node
 ## Project Structure
 
 ```
-facility-manager/
+rynix-fm/
 ├── backend/
 │   ├── server.js              # Express server with API routes
 │   ├── models/                # Database models (future)
@@ -99,7 +109,7 @@ facility-manager/
 
 1. **Clone and navigate to the project**:
    ```bash
-   cd facility-management-app
+   cd rynix-fm
    ```
 
 2. **Install main dependencies**:
