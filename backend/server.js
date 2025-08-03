@@ -133,6 +133,15 @@ function initializeDatabase() {
         }
         console.log('Database connected successfully');
         
+        // Enable foreign key constraints
+        db.run('PRAGMA foreign_keys = ON', (err) => {
+          if (err) {
+            console.error('Error enabling foreign keys:', err);
+          } else {
+            console.log('Foreign key constraints enabled');
+          }
+        });
+        
         // Check if database is empty (first run)
         db.all("SELECT name FROM sqlite_master WHERE type='table'", (err, tables) => {
           if (err) {
@@ -455,7 +464,7 @@ app.get('/api/facilities/:id', facilityCache, (req, res) => {
   });
 });
 
-app.post('/api/facilities', (req, res) => {
+app.post('/api/facilities', invalidateFacilities, (req, res) => {
   const { 
     name, type, location, address, description, status, 
     manager, contact, area, floors, yearBuilt, notes 
@@ -501,7 +510,7 @@ app.post('/api/facilities', (req, res) => {
   });
 });
 
-app.put('/api/facilities/:id', (req, res) => {
+app.put('/api/facilities/:id', invalidateFacilities, (req, res) => {
   const { 
     name, type, location, address, description, status, 
     manager, contact, area, floors, yearBuilt, notes 
@@ -553,7 +562,7 @@ app.put('/api/facilities/:id', (req, res) => {
   });
 });
 
-app.delete('/api/facilities/:id', (req, res) => {
+app.delete('/api/facilities/:id', invalidateFacilities, (req, res) => {
   db.run('DELETE FROM facilities WHERE id = ?', [req.params.id], function(err) {
     if (err) {
       console.error('Delete facility error:', err);

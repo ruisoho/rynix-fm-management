@@ -210,7 +210,7 @@ const Dashboard = () => {
           <div className="relative quick-actions-container">
              <button
                onClick={() => setShowQuickActions(!showQuickActions)}
-               className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-medium rounded-lg shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+               className="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
              >
                <PlusIcon className="h-5 w-5 mr-2" />
                Quick Actions
@@ -219,7 +219,7 @@ const Dashboard = () => {
              {/* Quick Actions Dropdown */}
              {showQuickActions && (
                <div className="absolute right-0 mt-3 w-72 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 z-50 overflow-hidden">
-                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-700 dark:to-gray-600 px-4 py-3 border-b border-gray-200 dark:border-gray-600">
+                <div className="bg-blue-50 dark:bg-gray-700 px-4 py-3 border-b border-gray-200 dark:border-gray-600">
                   <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Quick Actions</h3>
                   <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">Create new items quickly</p>
                 </div>
@@ -231,7 +231,7 @@ const Dashboard = () => {
                         key={action.name}
                         to={action.link}
                         onClick={() => setShowQuickActions(false)}
-                        className="flex items-center p-3 rounded-lg hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 dark:hover:from-blue-900/20 dark:hover:to-indigo-900/20 transition-all duration-200 group border border-transparent hover:border-blue-200 dark:hover:border-blue-500/30"
+                        className="flex items-center p-3 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all duration-200 group border border-transparent hover:border-blue-200 dark:hover:border-blue-500/30"
                       >
                         <div className={`p-2.5 rounded-xl ${action.bgColor} mr-4 group-hover:scale-110 transition-transform duration-200 shadow-sm`}>
                           <Icon className={`h-5 w-5 ${action.color}`} />

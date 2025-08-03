@@ -734,6 +734,19 @@ const Meters = () => {
     }
   };
 
+  const getSingularTabLabel = (tab) => {
+    switch (tab) {
+      case 'electric':
+        return 'Electric Meter';
+      case 'gas':
+        return 'Natural Gas Meter';
+      case 'heating':
+        return 'Heating Meter';
+      default:
+        return 'Electric Meter';
+    }
+  };
+
   const statusCounts = getStatusCounts();
   const filteredMeters = getFilteredMeters();
 
@@ -753,8 +766,14 @@ const Meters = () => {
           <button
             onClick={() => setShowUploadModal(true)}
             className="btn btn-outline"
-            disabled={activeTab !== 'electric'}
-            title={activeTab !== 'electric' ? 'CSV upload is only available for electric meters' : 'Upload CSV data'}
+            disabled={activeTab !== 'electric' || facilities.length === 0}
+            title={
+              facilities.length === 0 
+                ? 'You must create a facility first before uploading meters' 
+                : activeTab !== 'electric' 
+                  ? 'CSV upload is only available for electric meters' 
+                  : 'Upload CSV data'
+            }
           >
             <ArrowUpTrayIcon className="h-4 w-4 mr-2" />
             Upload CSV
@@ -762,9 +781,11 @@ const Meters = () => {
           <button
             onClick={() => setShowCreateModal(true)}
             className="btn btn-primary"
+            disabled={facilities.length === 0}
+            title={facilities.length === 0 ? 'You must create a facility first before adding meters' : `Add ${getSingularTabLabel(activeTab)}`}
           >
             <PlusIcon className="h-4 w-4 mr-2" />
-            Add {getTabLabel(activeTab).slice(0, -1)}
+            Add {getSingularTabLabel(activeTab)}
           </button>
         </div>
       </div>
@@ -773,6 +794,21 @@ const Meters = () => {
       {error && (
         <div className="bg-red-50 dark:bg-red-900 border border-red-200 dark:border-red-700 rounded-md p-4">
           <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+        </div>
+      )}
+      
+      {/* No facilities warning */}
+      {facilities.length === 0 && isDataLoaded && (
+        <div className="bg-yellow-50 dark:bg-yellow-900 border border-yellow-200 dark:border-yellow-700 rounded-md p-4">
+          <div className="flex items-center">
+            <ExclamationTriangleIcon className="h-5 w-5 text-yellow-600 dark:text-yellow-400 mr-2" />
+            <p className="text-sm text-yellow-800 dark:text-yellow-200">
+              No facilities found. You must create a facility first before adding meters. 
+              <a href="/facilities" className="font-medium underline hover:no-underline">
+                Go to Facilities page
+              </a> to create your first facility.
+            </p>
+          </div>
         </div>
       )}
       
@@ -1339,7 +1375,7 @@ const Meters = () => {
           {React.createElement(getTabIcon(activeTab), { className: "empty-state-icon" })}
           <h3 className="empty-state-title">No {getTabLabel(activeTab).toLowerCase()}</h3>
           <p className="empty-state-description">
-            Add your first {getTabLabel(activeTab).toLowerCase().slice(0, -1)} to get started.
+            Add your first {getSingularTabLabel(activeTab).toLowerCase()} to get started.
           </p>
         </div>
       )}
@@ -1349,7 +1385,7 @@ const Meters = () => {
         <div className="modal-overlay">
           <div className="modal-content">
             <div className="modal-header">
-              <h3 className="modal-title">Add {getTabLabel(activeTab).slice(0, -1)}</h3>
+              <h3 className="modal-title">Add {getSingularTabLabel(activeTab)}</h3>
               <button
                 onClick={() => setShowCreateModal(false)}
                 className="modal-close"
@@ -1639,7 +1675,7 @@ const Meters = () => {
         <div className="modal-overlay">
           <div className="modal-content">
             <div className="modal-header">
-              <h3 className="modal-title">Edit {getTabLabel(activeTab).slice(0, -1)}</h3>
+              <h3 className="modal-title">Edit {getSingularTabLabel(activeTab)}</h3>
               <button
                 onClick={() => {
                   setShowEditModal(false);
@@ -2291,7 +2327,7 @@ const Meters = () => {
         <div className="modal-overlay">
           <div className="modal-content">
             <div className="modal-header">
-              <h3 className="modal-title">Delete {getTabLabel(activeTab).slice(0, -1)}</h3>
+              <h3 className="modal-title">Delete {getSingularTabLabel(activeTab)}</h3>
               <button
                 onClick={() => {
                   setShowDeleteModal(false);
@@ -2305,7 +2341,7 @@ const Meters = () => {
             
             <div className="modal-body">
               <p className="text-gray-600 dark:text-gray-400">
-                Are you sure you want to delete this {getTabLabel(activeTab).toLowerCase().slice(0, -1)}? 
+                Are you sure you want to delete this {getSingularTabLabel(activeTab).toLowerCase()}? 
                 {activeTab !== 'heating' && ' All associated readings will also be deleted.'} 
                 This action cannot be undone.
               </p>

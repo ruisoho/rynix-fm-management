@@ -341,7 +341,7 @@ const PerformanceMonitor = () => {
       </div>
 
       {/* Optimization Status */}
-      <div className="bg-gradient-to-r from-blue-50 to-green-50 dark:from-blue-900 dark:to-green-900 rounded-lg p-6">
+      <div className="bg-blue-50 dark:bg-blue-900 rounded-lg p-6">
         <div className="flex items-center">
           <div className="flex-shrink-0">
             <div className="w-8 h-8 text-green-500">

@@ -661,7 +661,7 @@ const ChartsReports = () => {
   return (
     <div className="space-y-6">
       {/* Enhanced Header with Quick Stats */}
-      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-900 rounded-lg p-6">
+      <div className="bg-blue-50 dark:bg-gray-800 rounded-lg p-6">
         <div className="flex justify-between items-start">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">
