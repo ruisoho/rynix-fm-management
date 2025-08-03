@@ -1488,6 +1488,63 @@ app.get('/api/meters/:meterId/readings', (req, res) => {
   });
 });
 
+// Get meter consumption data with baseline exclusion
+app.get('/api/meters/:meterId/consumption', (req, res) => {
+  const { startDate, endDate } = req.query;
+  let dateFilter = '';
+  let params = [req.params.meterId];
+  
+  if (startDate && endDate) {
+    dateFilter = 'AND date BETWEEN ? AND ?';
+    params.push(startDate, endDate);
+  } else if (startDate) {
+    dateFilter = 'AND date >= ?';
+    params.push(startDate);
+  } else if (endDate) {
+    dateFilter = 'AND date <= ?';
+    params.push(endDate);
+  }
+  
+  const query = `
+    WITH ordered_readings AS (
+      SELECT 
+        id,
+        meter_id,
+        value,
+        date,
+        notes,
+        LAG(value) OVER (ORDER BY date) as prev_value,
+        ROW_NUMBER() OVER (ORDER BY date) as row_num
+      FROM meter_readings 
+      WHERE meter_id = ? ${dateFilter}
+        AND value IS NOT NULL
+      ORDER BY date
+    )
+    SELECT 
+      id,
+      meter_id,
+      value,
+      date,
+      notes,
+      CASE 
+         WHEN row_num > 1 AND prev_value IS NOT NULL 
+         THEN CASE WHEN (value - prev_value) > 0 THEN (value - prev_value) ELSE 0 END
+         ELSE 0
+       END as consumption,
+      row_num = 1 as is_baseline
+    FROM ordered_readings
+    ORDER BY date
+  `;
+  
+  db.all(query, params, (err, readings) => {
+    if (err) {
+      console.error('Get consumption data error:', err);
+      return res.status(500).json({ error: 'Failed to fetch meter consumption data' });
+    }
+    res.json(readings);
+  });
+});
+
 app.post('/api/meters/:meterId/readings', (req, res) => {
   const { value, date, notes } = req.body;
   if (value === undefined || !date) {

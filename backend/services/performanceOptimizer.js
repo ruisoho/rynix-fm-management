@@ -207,11 +207,25 @@ class PerformanceOptimizer {
           em.type,
           em.id as meter_id,
           (
-            SELECT MAX(mr2.value) - MIN(mr2.value)
-            FROM meter_readings mr2 
-            WHERE mr2.meter_id = em.id 
-              AND strftime('%Y-%m', mr2.date) = strftime('%Y-%m', mr.date)
-              AND mr2.value IS NOT NULL
+            WITH ordered_readings AS (
+              SELECT 
+                mr2.value,
+                LAG(mr2.value) OVER (ORDER BY mr2.date) as prev_value,
+                ROW_NUMBER() OVER (ORDER BY mr2.date) as row_num
+              FROM meter_readings mr2 
+              WHERE mr2.meter_id = em.id 
+                AND strftime('%Y-%m', mr2.date) = strftime('%Y-%m', mr.date)
+                AND mr2.value IS NOT NULL
+              ORDER BY mr2.date
+            )
+            SELECT COALESCE(SUM(
+               CASE 
+                 WHEN row_num > 1 AND prev_value IS NOT NULL 
+                 THEN CASE WHEN (value - prev_value) > 0 THEN (value - prev_value) ELSE 0 END
+                 ELSE 0
+               END
+             ), 0)
+            FROM ordered_readings
           ) as consumption
         FROM electric_meters em
         INNER JOIN meter_readings mr ON em.id = mr.meter_id
@@ -225,18 +239,25 @@ class PerformanceOptimizer {
           'heating' as type,
           hs.id as meter_id,
           (
-            SELECT 
-              CASE 
-                WHEN LAG(hr2.value) OVER (PARTITION BY hr2.heating_id ORDER BY hr2.date) IS NOT NULL 
-                THEN hr2.value - LAG(hr2.value) OVER (PARTITION BY hr2.heating_id ORDER BY hr2.date)
-                ELSE hr2.value * 0.1  -- For first reading, use 10% as estimated consumption
-              END
-            FROM heating_readings hr2 
-            WHERE hr2.heating_id = hs.id 
-              AND strftime('%Y-%m', hr2.date) = strftime('%Y-%m', hr.date)
-              AND hr2.value IS NOT NULL
-            ORDER BY hr2.date DESC
-            LIMIT 1
+            WITH ordered_heating_readings AS (
+              SELECT 
+                hr2.value,
+                LAG(hr2.value) OVER (ORDER BY hr2.date) as prev_value,
+                ROW_NUMBER() OVER (ORDER BY hr2.date) as row_num
+              FROM heating_readings hr2 
+              WHERE hr2.heating_id = hs.id 
+                AND strftime('%Y-%m', hr2.date) = strftime('%Y-%m', hr.date)
+                AND hr2.value IS NOT NULL
+              ORDER BY hr2.date
+            )
+            SELECT COALESCE(SUM(
+               CASE 
+                 WHEN row_num > 1 AND prev_value IS NOT NULL 
+                 THEN CASE WHEN (value - prev_value) > 0 THEN (value - prev_value) ELSE 0 END
+                 ELSE 0
+               END
+             ), 0)
+             FROM ordered_heating_readings
           ) as base_consumption
         FROM heating_systems hs
         INNER JOIN heating_readings hr ON hs.id = hr.heating_id

@@ -239,6 +239,15 @@ export const ApiProvider = ({ children }) => {
     return handleApiCall(() => axios.get(`/api/meters/${meterId}/readings`).then(res => res.data));
   }, [handleApiCall]);
 
+  const getMeterConsumption = useCallback((meterId, startDate, endDate) => {
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+    
+    return handleApiCall(() => axios.get(`/api/meters/${meterId}/consumption${queryString}`).then(res => res.data));
+  }, [handleApiCall]);
+
   const createMeterReading = useCallback((meterId, data) => {
     return handleApiCall(() => axios.post(`/api/meters/${meterId}/readings`, data).then(res => res.data));
   }, [handleApiCall]);
@@ -308,6 +317,7 @@ export const ApiProvider = ({ children }) => {
     createMeter,
     updateMeter,
     getMeterReadings,
+    getMeterConsumption,
     createMeterReading,
     deleteMeter,
     
