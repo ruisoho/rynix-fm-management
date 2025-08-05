@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Static Test - Electron</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            margin: 0;
+            padding: 40px;
+            text-align: center;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 20px;
+        }
+        .card {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            backdrop-filter: blur(10px);
+        }
+        .button {
+            background: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px;
+        }
+        .button:hover {
+            background: #45a049;
+        }
+        .status {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Static HTML Test</h1>
+        <div class="card">
+            <h2>✅ Electron Static Loading Test</h2>
+            <p>If you can see this page, Electron can load static HTML files successfully!</p>
+            <p class="status">Status: WORKING</p>
+        </div>
+        
+        <div class="card">
+            <h3>Test Results</h3>
+            <p>✅ HTML Loading: Success</p>
+            <p>✅ CSS Styling: Success</p>
+            <p id="js-test">❌ JavaScript: Testing...</p>
+            <button class="button" onclick="testJavaScript()">Test JavaScript</button>
+        </div>
+        
+        <div class="card">
+            <h3>System Information</h3>
+            <p>User Agent: <span id="user-agent"></span></p>
+            <p>Current Time: <span id="current-time"></span></p>
+        </div>
+    </div>
+    
+    <script>
+        function testJavaScript() {
+            document.getElementById('js-test').innerHTML = '✅ JavaScript: Success';
+            document.getElementById('js-test').style.color = '#4CAF50';
+            alert('JavaScript is working in Electron!');
+        }
+        
+        function updateTime() {
+            document.getElementById('current-time').textContent = new Date().toLocaleString();
+        }
+        
+        // Initialize page
+        document.getElementById('user-agent').textContent = navigator.userAgent;
+        updateTime();
+        setInterval(updateTime, 1000);
+        
+        console.log('✅ Static HTML test page loaded successfully!');
+        console.log('🎯 This confirms Electron can load static files');
+    </script>
+</body>
+</html>

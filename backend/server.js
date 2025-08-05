@@ -1319,6 +1319,10 @@ app.get('/api/meters', (req, res) => {
       console.error('Get meters error:', err);
       return res.status(500).json({ error: 'Failed to fetch electric meters' });
     }
+    console.log(`Total meters fetched: ${meters.length}`);
+    if (meters.length > 0) {
+      console.log('Sample meter:', meters[0]);
+    }
     res.json(meters);
   });
 });

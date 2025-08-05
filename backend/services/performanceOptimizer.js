@@ -57,25 +57,49 @@ class PerformanceOptimizer {
       
       try {
         const sql = fs.readFileSync(optimizationsPath, 'utf8');
-        const statements = sql.split(';').filter(stmt => stmt.trim().length > 0);
+        const statements = sql.split(';').filter(stmt => {
+          const trimmed = stmt.trim();
+          return trimmed.length > 0 && 
+                 !trimmed.startsWith('--') && 
+                 !trimmed.startsWith('/*') &&
+                 !trimmed.includes('PRAGMA') && // Skip PRAGMA statements as they're handled separately
+                 !trimmed.includes('VACUUM') && // Skip maintenance commands
+                 !trimmed.includes('ANALYZE');
+        });
         
         let completed = 0;
         const total = statements.length;
+        let successCount = 0;
+        
+        if (total === 0) {
+          console.log('📊 No performance optimizations to apply');
+          resolve();
+          return;
+        }
         
         statements.forEach((statement, index) => {
-          this.db.run(statement.trim(), (err) => {
-            if (err && !err.message.includes('already exists')) {
-              console.warn(`Warning applying optimization ${index + 1}:`, err.message);
+          const trimmedStatement = statement.trim();
+          this.db.run(trimmedStatement, (err) => {
+            if (err) {
+              // Only log actual errors, not expected conditions
+              if (!err.message.includes('already exists') && 
+                  !err.message.includes('no more rows available') &&
+                  !err.message.includes('SQLITE_MISUSE')) {
+                console.warn(`⚠️  Optimization ${index + 1} warning:`, err.message);
+              }
+            } else {
+              successCount++;
             }
             
             completed++;
             if (completed === total) {
-              console.log(`📊 Applied ${total} performance optimizations`);
+              console.log(`📊 Applied ${successCount}/${total} performance optimizations successfully`);
               resolve();
             }
           });
         });
       } catch (error) {
+        console.error('❌ Error reading performance optimizations file:', error);
         reject(error);
       }
     });

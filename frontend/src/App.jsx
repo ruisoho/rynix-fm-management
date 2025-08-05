@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
@@ -48,7 +48,7 @@ function App() {
     }, 10000);
 
     checkApiHealth();
-    
+
     return () => clearTimeout(timeout);
   }, []);
 
@@ -87,6 +87,7 @@ function App() {
     <ThemeProvider>
       <ApiProvider>
         <Router
+          basename="/"
           future={{
             v7_startTransition: true,
             v7_relativeSplatPath: true,
@@ -98,17 +99,18 @@ function App() {
               {/* Mobile sidebar overlay */}
               {sidebarOpen && (
                 <div className="fixed inset-0 z-40 lg:hidden">
-                  <div 
-                    className="fixed inset-0 bg-gray-600 bg-opacity-75" 
+                  <div
+                    className="fixed inset-0 bg-gray-600 bg-opacity-75"
                     onClick={() => setSidebarOpen(false)}
                   />
                 </div>
               )}
-
               {/* Sidebar */}
-              <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-light-card dark:bg-dark-card border-r border-light-border dark:border-dark-border shadow-lg transform transition-all duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-y-0 ${
-                sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-              }`}>
+              <div
+                className={`fixed inset-y-0 left-0 z-50 w-64 bg-light-card dark:bg-dark-card border-r border-light-border dark:border-dark-border shadow-lg transform transition-all duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-y-0 ${
+                  sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+                }`}
+              >
                 <div className="flex items-center justify-between h-16 px-4 border-b border-light-border dark:border-dark-border lg:hidden">
                   <h1 className="text-lg font-semibold text-light-text dark:text-dark-text">
                     Facility Manager
@@ -122,15 +124,13 @@ function App() {
                 </div>
                 <Sidebar onNavigate={() => setSidebarOpen(false)} />
               </div>
-
               {/* Main content */}
               <div className="flex-1">
                 {/* Header positioned to the right of sidebar on desktop */}
-                <Header 
+                <Header
                   onMenuClick={() => setSidebarOpen(true)}
                   showMenuButton={true}
                 />
-                
                 {/* Page content */}
                 <main className="py-2 px-4 sm:px-6 lg:px-8">
                   <Routes>
@@ -146,23 +146,26 @@ function App() {
                     {/* Backward compatibility routes */}
                     <Route path="/heating" element={<Navigate to="/meters" replace />} />
                     <Route path="/settings" element={<Settings />} />
-                    <Route path="*" element={
-                      <div className="text-center py-12">
-                        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-                          Page Not Found
-                        </h1>
-                        <p className="text-gray-600 dark:text-gray-400 mb-4">
-                          The page you're looking for doesn't exist.
-                        </p>
-                        <button
-                          onClick={() => window.history.back()}
-                          className="btn btn-primary"
-                        >
-                          Go Back
-                        </button>
-                      </div>
-                    } />
-                    </Routes>
+                    <Route
+                      path="*"
+                      element={
+                        <div className="text-center py-12">
+                          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+                            Page Not Found
+                          </h1>
+                          <p className="text-gray-600 dark:text-gray-400 mb-4">
+                            The page you're looking for doesn't exist.
+                          </p>
+                          <button
+                            onClick={() => window.history.back()}
+                            className="btn btn-primary"
+                          >
+                            Go Back
+                          </button>
+                        </div>
+                      }
+                    />
+                  </Routes>
                 </main>
               </div>
             </div>

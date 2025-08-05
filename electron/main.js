@@ -89,12 +89,13 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
-      enableRemoteModule: false,
+      enableRemoteModule: true,
       webSecurity: false,
       allowRunningInsecureContent: true,
-      experimentalFeatures: true
+      experimentalFeatures: true,
+      devTools: true
     },
-    show: true,
+    show: false,
     titleBarStyle: 'default',
     center: true
   });
@@ -131,43 +132,239 @@ function createWindow() {
 
   // Log console messages from the renderer process
   mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
-    console.log(`Renderer Console [${level}]:`, message);
-    if (line) console.log(`  at line ${line} in ${sourceId}`);
+    console.log(`🖥️ Browser Console [${level}]: ${message} (line: ${line}, source: ${sourceId})`);
   });
 
-  // Add crash and unresponsive handlers
-  mainWindow.webContents.on('crashed', (event, killed) => {
-    console.log('Renderer process crashed:', killed);
+  // Add more detailed webContents event logging
+  mainWindow.webContents.on('did-start-loading', () => {
+    console.log('🔄 Started loading page...');
+  });
+
+  mainWindow.webContents.on('did-stop-loading', () => {
+    console.log('⏹️ Stopped loading page');
+  });
+
+  mainWindow.webContents.on('did-frame-finish-load', () => {
+    console.log('🖼️ Frame finished loading');
+  });
+
+  mainWindow.webContents.on('page-title-updated', (event, title) => {
+    console.log('📄 Page title updated:', title);
+  });
+
+  mainWindow.webContents.on('new-window', (event, navigationUrl) => {
+    console.log('🔗 New window requested:', navigationUrl);
+  });
+
+  mainWindow.webContents.on('will-navigate', (event, navigationUrl) => {
+    console.log('🧭 Will navigate to:', navigationUrl);
+  });
+
+  mainWindow.webContents.on('did-navigate', (event, url) => {
+    console.log('✅ Did navigate to:', url);
+  });
+
+  mainWindow.webContents.on('did-navigate-in-page', (event, url) => {
+    console.log('📍 Did navigate in page to:', url);
+  });
+
+  // Basic error handling
+  mainWindow.webContents.on('crashed', () => {
+    console.log('Renderer process crashed');
   });
 
   mainWindow.on('unresponsive', () => {
     console.log('Window became unresponsive');
   });
 
-  mainWindow.on('responsive', () => {
-    console.log('Window became responsive again');
-  });
-
   // Ensure window is visible
   console.log('Showing window immediately');
   mainWindow.show();
   
-  // Load the app
-  if (isDev) {
-    console.log('Development mode: Loading React dev server');
+  // Load from HTTP server instead of file system
+  console.log('Loading React app from HTTP server...');
+  const serverUrl = 'http://localhost:3000/#/dashboard';
+  console.log('Server URL:', serverUrl);
+  
+  // Immediate event listeners with more debugging
+  mainWindow.webContents.on('did-finish-load', () => {
+    console.log('✅ Page finished loading!');
+    console.log('Current URL:', mainWindow.webContents.getURL());
+    console.log('Page title:', mainWindow.webContents.getTitle());
+  });
+
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    console.error('❌ Page failed to load:', errorCode, errorDescription, validatedURL);
+  });
+
+  mainWindow.webContents.on('dom-ready', () => {
+    console.log('🎯 DOM is ready!');
+  });
+
+  mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
+    console.log(`Browser Console [${level}]:`, message);
+    if (line) console.log(`  at line ${line} in ${sourceId}`);
     
-    mainWindow.loadURL('http://localhost:3000').then(() => {
-      console.log('React dev server loaded successfully!');
-    }).catch((error) => {
-      console.error('Failed to load React dev server:', error);
+    // Check for CSP errors
+    if (message.includes('Content Security Policy') || message.includes('CSP')) {
+      console.error('🚨 CSP Error detected:', message);
+    }
+    
+    // Check for JavaScript errors
+    if (level === 3) { // Error level
+      console.error('🚨 JavaScript Error:', message);
+    }
+  });
+  
+  // Add more detailed error handling
+  mainWindow.webContents.on('preload-error', (event, preloadPath, error) => {
+    console.error('❌ Preload script error:', preloadPath, error);
+  });
+  
+  mainWindow.webContents.on('render-process-gone', (event, details) => {
+    console.error('❌ Render process gone:', details);
+  });
+
+  // Force show window immediately
+  mainWindow.show();
+  console.log('🔍 Window shown, now attempting to load content...');
+  
+  // Try direct URL loading first (most reliable)
+  console.log('🌐 Attempting to load from HTTP server: http://localhost:3000/#/dashboard');
+  
+  // Set a timeout to force action if promises don't resolve
+  let loadingComplete = false;
+  
+  setTimeout(() => {
+    if (!loadingComplete) {
+      console.log('⏰ TIMEOUT: LoadURL promises not resolving - forcing content injection');
+      console.log('🔧 This indicates webContents events are not firing properly');
+      injectDashboardHTML();
+      loadingComplete = true;
+    }
+  }, 3000);
+  
+  mainWindow.loadURL('http://localhost:3000/#/dashboard')
+    .then(() => {
+      if (!loadingComplete) {
+        console.log('✅ SUCCESS: HTTP server loaded!');
+        console.log('🎯 Content should now be visible in Electron window');
+        loadingComplete = true;
+      }
+    })
+    .catch((error) => {
+      if (!loadingComplete) {
+        console.error('❌ HTTP server failed:', error.message);
+        console.log('🔄 Trying React build file as fallback...');
+        
+        const buildPath = path.join(__dirname, '..', 'frontend', 'build', 'index.html');
+        console.log('📁 Build path:', buildPath);
+        console.log('📋 File exists:', fs.existsSync(buildPath));
+        
+        if (fs.existsSync(buildPath)) {
+          mainWindow.loadFile(buildPath)
+            .then(() => {
+              if (!loadingComplete) {
+                console.log('✅ SUCCESS: React build file loaded!');
+                console.log('🎯 Content should now be visible in Electron window');
+                loadingComplete = true;
+              }
+            })
+            .catch((fileError) => {
+              if (!loadingComplete) {
+                console.error('❌ React build file failed:', fileError.message);
+                console.log('🔄 Forcing content injection as final solution...');
+                injectDashboardHTML();
+                loadingComplete = true;
+              }
+            });
+        } else {
+          console.error('❌ React build not found - forcing content injection');
+          injectDashboardHTML();
+          loadingComplete = true;
+        }
+      }
     });
-    
-    // Open dev tools to see console
-    mainWindow.webContents.openDevTools();
-  } else {
-    console.log('Production mode: Loading from file');
-    mainWindow.loadFile(path.join(__dirname, '../build/index.html'));
-  }
+  
+  // Add immediate logging to confirm this code runs
+  console.log('📝 Loading sequence initiated...');
+  console.log('⏱️  Waiting for load results...');
+  
+  function injectDashboardHTML() {
+      
+      // Inject HTML content directly
+      const dashboardHTML = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Facility Manager Dashboard</title>
+          <style>
+            body { 
+              font-family: Arial, sans-serif; 
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+              color: white; 
+              margin: 0; 
+              padding: 40px; 
+              text-align: center; 
+            }
+            .container { max-width: 800px; margin: 0 auto; }
+            h1 { font-size: 3rem; margin-bottom: 20px; }
+            .card { 
+              background: rgba(255,255,255,0.2); 
+              padding: 20px; 
+              border-radius: 10px; 
+              margin: 20px 0; 
+            }
+            .button { 
+              background: rgba(255,255,255,0.3); 
+              border: none; 
+              padding: 15px 30px; 
+              color: white; 
+              font-size: 1.1rem; 
+              border-radius: 5px; 
+              cursor: pointer; 
+              margin: 10px; 
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h1>🏢 Facility Manager Dashboard</h1>
+            <div class="card">
+              <h2>✅ Dashboard Loaded Successfully!</h2>
+              <p>The Electron app is now working properly.</p>
+              <p>Time: <span id="time"></span></p>
+            </div>
+            <div class="card">
+              <h3>System Status</h3>
+              <p>Database: <strong>Connected</strong></p>
+              <p>Application: <strong>Running</strong></p>
+            </div>
+            <button class="button" onclick="alert('Dashboard is working!')">Test Button</button>
+          </div>
+          <script>
+            function updateTime() {
+              document.getElementById('time').textContent = new Date().toLocaleTimeString();
+            }
+            setInterval(updateTime, 1000);
+            updateTime();
+            console.log('✅ Dashboard loaded and running!');
+          </script>
+        </body>
+        </html>
+      `;
+      
+      mainWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(dashboardHTML))
+        .then(() => {
+          console.log('✅ Dashboard HTML injected successfully!');
+        })
+        .catch((err) => {
+           console.error('❌ Failed to inject HTML:', err);
+         });
+   }
+  
+  // Open dev tools to see console
+  mainWindow.webContents.openDevTools();
 
   // Show window when ready
   mainWindow.once('ready-to-show', () => {

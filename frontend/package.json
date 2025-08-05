@@ -1,7 +1,7 @@
 {
   "name": "facility-manager-frontend",
   "version": "1.0.0",
-  "homepage": "https://ruisoho.github.io/rynix-fm-management",
+  "homepage": "./",
   "private": true,
   "dependencies": {
     "@headlessui/react": "^1.7.17",

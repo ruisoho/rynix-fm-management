@@ -12,8 +12,8 @@ export const useApi = () => {
   return context;
 };
 
-// Check if we're in demo mode
-const isDemoMode = process.env.REACT_APP_DEMO_MODE === 'true' || process.env.NODE_ENV === 'production';
+// Check if we're in demo mode - only enable when explicitly set
+const isDemoMode = process.env.REACT_APP_DEMO_MODE === 'true';
 
 // Configure axios defaults
 axios.defaults.baseURL = process.env.REACT_APP_API_URL || '';

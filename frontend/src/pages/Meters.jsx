@@ -1,23 +1,21 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   PlusIcon,
-  BoltIcon,
-  FireIcon,
-  BuildingOfficeIcon,
-  CalendarIcon,
-  ChartBarIcon,
-  EyeIcon,
-  PencilIcon,
-  TrashIcon,
-  WrenchScrewdriverIcon,
-  ExclamationTriangleIcon,
-  Bars3Icon,
   ArrowUpTrayIcon,
   DocumentTextIcon,
+  BoltIcon,
+  FireIcon,
+  WrenchScrewdriverIcon,
+  ChartBarIcon,
   XMarkIcon
 } from '@heroicons/react/24/outline';
-import { useApi } from '../contexts/ApiContext';
 import { format, isAfter, parseISO } from 'date-fns';
+import { useApi } from '../contexts/ApiContext';
+import MeterTabs from '../components/MeterTabs';
+import MeterFilters from '../components/MeterFilters';
+import MeterList from '../components/MeterList';
+import MeterForm from '../components/MeterForm';
+import MeterReadings from '../components/MeterReadings';
 
 const Meters = () => {
   const { 
@@ -52,6 +50,7 @@ const Meters = () => {
   const [selectedMeter, setSelectedMeter] = useState(null);
   const [readings, setReadings] = useState([]);
   const [filter, setFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   
   // CSV Upload state
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -101,6 +100,25 @@ const Meters = () => {
     notes: ''
   });
 
+  // Unified form data state
+  const [formData, setFormData] = useState({});
+
+  // Form data handler
+  const handleFormDataChange = (field, value) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  // Reading form data
+  const [readingFormData, setReadingFormData] = useState({
+    reading_value: '',
+    reading_date: new Date().toISOString().slice(0, 16),
+    notes: ''
+  });
+
+  const handleReadingFormChange = (field, value) => {
+    setReadingFormData(prev => ({ ...prev, [field]: value }));
+  };
+
   const fetchData = useCallback(async () => {
     try {
       const [metersData, heatingData, facilitiesData] = await Promise.all([
@@ -109,13 +127,16 @@ const Meters = () => {
         getFacilities()
       ]);
       
+      // Debug: Log raw API data
+      console.log('Raw API data:', { metersData, heatingData, facilitiesData });
+      
       // Separate meters by type
       const allMeters = Array.isArray(metersData) ? metersData : [];
       const electricFiltered = allMeters.filter(meter => meter.type === 'electric');
       const gasFiltered = allMeters.filter(meter => meter.type === 'gas');
       const heatingFiltered = Array.isArray(heatingData) ? heatingData : [];
       
-
+      console.log('Filtered meters:', { electricFiltered, gasFiltered, heatingFiltered });
       
       setElectricMeters(electricFiltered);
       setGasMeters(gasFiltered);
@@ -129,7 +150,7 @@ const Meters = () => {
       setFacilities([]);
     }
   }, [getMeters, getHeating, getFacilities]);
-
+  
   useEffect(() => {
     fetchData();
     
@@ -559,6 +580,30 @@ const Meters = () => {
 
   const statusCounts = getStatusCounts();
   const filteredMeters = getFilteredMeters();
+  
+  // Debug: Log meter data
+  console.log('Debug - Current meters data:', {
+    activeTab,
+    electricMeters: electricMeters.length,
+    gasMeters: gasMeters.length, 
+    heatingMeters: heatingMeters.length,
+    filteredMeters: filteredMeters.length,
+    filter,
+    loading
+  });
+  
+  // Temporary alert for debugging
+  if (filteredMeters.length === 0 && !loading) {
+    console.warn('No filtered meters found!', {
+      electricMeters,
+      gasMeters,
+      heatingMeters,
+      activeTab,
+      filter
+    });
+    // Show alert for debugging
+    alert(`Debug: No meters showing. Electric: ${electricMeters.length}, Gas: ${gasMeters.length}, Heating: ${heatingMeters.length}, Active Tab: ${activeTab}, Filter: ${filter}`);
+  }
 
   return (
     <div className="space-y-6">
@@ -602,559 +647,65 @@ const Meters = () => {
 
 
       {/* Meter type tabs */}
-      <div className="border-b border-gray-200 dark:border-gray-700">
-        <nav className="-mb-px flex space-x-8">
-          {['electric', 'gas', 'heating'].map((tab) => {
-            const Icon = getTabIcon(tab);
-            const isActive = activeTab === tab;
-            return (
-              <button
-                key={tab}
-                onClick={() => {
-                  setActiveTab(tab);
-                  setFilter('all');
-                }}
-                className={`flex items-center py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
-                  isActive
-                    ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-                }`}
-              >
-                <Icon className="h-5 w-5 mr-2" />
-                {getTabLabel(tab)}
-                <span className="ml-2 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 py-0.5 px-2 rounded-full text-xs">
-                  {tab === 'electric' ? electricMeters.length : tab === 'gas' ? gasMeters.length : heatingMeters.length}
-                </span>
-              </button>
-            );
-          })}
-        </nav>
-      </div>
+      <MeterTabs
+        activeTab={activeTab}
+        onTabChange={(tab) => {
+          setActiveTab(tab);
+          setFilter('all');
+        }}
+        electricMeters={electricMeters}
+        gasMeters={gasMeters}
+        heatingMeters={heatingMeters}
+      />
 
       {/* Status filter tabs */}
-      <div className="border-b border-gray-200 dark:border-gray-700">
-        <nav className="-mb-px flex space-x-8">
-          {[
-            { key: 'all', label: 'All', count: statusCounts.all },
-            { key: 'active', label: 'Active', count: statusCounts.active },
-            { key: 'inactive', label: 'Inactive', count: statusCounts.inactive },
-            { key: 'broken', label: 'Broken', count: statusCounts.broken },
-            ...(activeTab === 'heating' ? [{ key: 'maintenance', label: 'Maintenance', count: statusCounts.maintenance }] : [])
-          ].map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setFilter(tab.key)}
-              className={`flex items-center py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
-                filter === tab.key
-                  ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-              }`}
-            >
-              {tab.label}
-              <span className="ml-2 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 py-0.5 px-2 rounded-full text-xs">
-                {tab.count}
-              </span>
-            </button>
-          ))}
-        </nav>
-      </div>
+      <MeterFilters
+        statusFilter={filter}
+        onStatusFilterChange={setFilter}
+        meters={getCurrentMeters()}
+      />
 
-      {/* Drag and drop info */}
-      {filteredMeters.length > 1 && (
-        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
-          <div className="flex items-center">
-            <Bars3Icon className="h-4 w-4 text-blue-600 dark:text-blue-400 mr-2" />
-            <p className="text-sm text-blue-700 dark:text-blue-300">
-              Drag and drop meters to rearrange their order. Your custom arrangement will be saved automatically.
-            </p>
-          </div>
-        </div>
-      )}
+      {/* Meters List */}
+      <MeterList
+        meters={filteredMeters}
+        activeTab={activeTab}
+        statusFilter={filter}
+        loading={loading}
+        onViewReadings={handleViewReadings}
+        onAddReading={(meter) => {
+          setSelectedMeter(meter);
+          setShowReadingModal(true);
+        }}
+        onEdit={handleEdit}
+        onDelete={(meter) => {
+          setSelectedMeter(meter);
+          setShowDeleteModal(true);
+        }}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        draggedMeter={draggedMeter}
+        dragOverIndex={dragOverIndex}
+      />
 
-      {/* Meters grid */}
-      {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[...Array(6)].map((_, i) => (
-            <div key={i} className="card animate-pulse">
-              <div className="card-body">
-                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4 mb-2"></div>
-                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2 mb-4"></div>
-                <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-full"></div>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : filteredMeters.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredMeters.map((meter, index) => {
-            const Icon = getTabIcon(activeTab);
-            const isDragOver = dragOverIndex === index;
-            const isDragging = draggedMeter && draggedMeter.meter.id === meter.id;
-            
-            return (
-              <div 
-                key={meter.id} 
-                draggable
-                onDragStart={(e) => handleDragStart(e, meter, index)}
-                onDragEnd={handleDragEnd}
-                onDragOver={(e) => handleDragOver(e, index)}
-                onDragLeave={handleDragLeave}
-                onDrop={(e) => handleDrop(e, index)}
-                className={`card hover:shadow-medium transition-all duration-200 cursor-move ${
-                  isDragging ? 'opacity-50 scale-95' : ''
-                } ${
-                  isDragOver ? 'ring-2 ring-primary-500 ring-opacity-50 transform scale-105' : ''
-                }`}
-              >
-                <div className="card-body relative">
-                  {/* Drag handle */}
-                  <div className="absolute top-2 right-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
-                    <Bars3Icon className="h-4 w-4" />
-                  </div>
-                  
-                  <div className="flex items-start justify-between mb-4 pr-8">
-                    <div className="flex items-center">
-                      <div className="p-2 bg-primary-100 dark:bg-primary-900 rounded-lg mr-3">
-                        <Icon className="h-6 w-6 text-primary-600" />
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                          {activeTab === 'heating' ? 
-                            (meter.location || meter.notes || 'Heating Meter') : 
-                            `${meter.location || ''} ${meter.serial_number}`
-                          }
-                        </h3>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                          {meter.facility_name}
-                        </p>
-                      </div>
-                    </div>
-                    <span className={getStatusBadge(meter.status)}>
-                      {meter.status}
-                    </span>
-                  </div>
-
-                  <div className="space-y-2 mb-4">
-                    {activeTab === 'heating' ? (
-                      <>
-                        {(meter.serial_number || meter.manufacturer) && (
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-gray-500 dark:text-gray-400">Serial Number:</span>
-                            <span className="text-sm text-gray-900 dark:text-gray-100">{meter.serial_number || meter.manufacturer}</span>
-                          </div>
-                        )}
-                        {(meter.location || meter.notes) && (
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-gray-500 dark:text-gray-400">Location:</span>
-                            <span className="text-sm text-gray-900 dark:text-gray-100">{meter.location || meter.notes}</span>
-                          </div>
-                        )}
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-500 dark:text-gray-400">Installation:</span>
-                          <span className="text-sm text-gray-900 dark:text-gray-100">
-                            {formatDate(meter.installation_date)}
-                          </span>
-                        </div>
-                        {meter.last_check && (
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-gray-500 dark:text-gray-400">Last Check:</span>
-                            <span className="text-sm text-gray-900 dark:text-gray-100">
-                              {formatDate(meter.last_check)}
-                            </span>
-                          </div>
-                        )}
-                        {meter.next_check && (
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-gray-500 dark:text-gray-400">Next Check:</span>
-                            <span className={`text-sm ${
-                              isMaintenanceDue(meter.next_check)
-                                ? 'text-red-600 dark:text-red-400 font-medium'
-                                : 'text-gray-900 dark:text-gray-100'
-                            }`}>
-                              {formatDate(meter.next_check)}
-                              {isMaintenanceDue(meter.next_check) && (
-                                <ExclamationTriangleIcon className="h-4 w-4 inline ml-1" />
-                              )}
-                            </span>
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        {meter.location && (
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-gray-500 dark:text-gray-400">Location:</span>
-                            <span className="text-sm text-gray-900 dark:text-gray-100">{meter.location}</span>
-                          </div>
-                        )}
-                        {activeTab === 'gas' && meter.gas_type && (
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-gray-500 dark:text-gray-400">Gas Type:</span>
-                            <span className="text-sm text-gray-900 dark:text-gray-100">
-                              {meter.gas_type.charAt(0).toUpperCase() + meter.gas_type.slice(1)}
-                            </span>
-                          </div>
-                        )}
-                        {activeTab === 'heating' && meter.model && (
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-gray-500 dark:text-gray-400">Heating Type:</span>
-                            <span className="text-sm text-gray-900 dark:text-gray-100">
-                              {meter.model.charAt(0).toUpperCase() + meter.model.slice(1).replace('_', ' ')}
-                            </span>
-                          </div>
-                        )}
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-500 dark:text-gray-400">Installation:</span>
-                          <span className="text-sm text-gray-900 dark:text-gray-100">
-                            {formatDate(meter.installation_date)}
-                          </span>
-                        </div>
-                      </>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
-                    <div className="flex space-x-2">
-                      <button
-                        onClick={() => {
-                          setSelectedMeter(meter);
-                          setShowReadingModal(true);
-                        }}
-                        className="btn btn-secondary btn-sm"
-                      >
-                        <PlusIcon className="h-4 w-4 mr-1" />
-                        Reading
-                      </button>
-                      <button
-                        onClick={() => handleViewReadings(meter)}
-                        className="btn btn-secondary btn-sm"
-                      >
-                        <EyeIcon className="h-4 w-4 mr-1" />
-                        View
-                      </button>
-                    </div>
-                    <div className="flex space-x-2">
-                      <button
-                        onClick={() => handleEdit(meter)}
-                        className="btn btn-secondary btn-sm"
-                      >
-                        <PencilIcon className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => {
-                          setSelectedMeter(meter);
-                          setShowDeleteModal(true);
-                        }}
-                        className="btn btn-danger btn-sm"
-                      >
-                        <TrashIcon className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="empty-state">
-          {React.createElement(getTabIcon(activeTab), { className: "empty-state-icon" })}
-          <h3 className="empty-state-title">No {getTabLabel(activeTab).toLowerCase()}</h3>
-          <p className="empty-state-description">
-            Add your first {getTabLabel(activeTab).toLowerCase().slice(0, -1)} to get started.
-          </p>
-        </div>
-      )}
-
-      {/* Create Modal */}
-      {showCreateModal && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h3 className="modal-title">Add {getTabLabel(activeTab).slice(0, -1)}</h3>
-              <button
-                onClick={() => setShowCreateModal(false)}
-                className="modal-close"
-              >
-                ×
-              </button>
-            </div>
-            
-            {activeTab === 'electric' && (
-              <form onSubmit={handleElectricSubmit}>
-                <div className="modal-body">
-                  <div className="form-group">
-                    <label className="form-label">Facility</label>
-                    <select
-                      value={electricFormData.facility_id}
-                      onChange={(e) => setElectricFormData({ ...electricFormData, facility_id: e.target.value })}
-                      className="form-input"
-                      required
-                    >
-                      <option value="">Select a facility</option>
-                      {facilities.map((facility) => (
-                        <option key={facility.id} value={facility.id}>
-                          {facility.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  <div className="form-group">
-                    <label className="form-label">Serial Number</label>
-                    <input
-                      type="text"
-                      value={electricFormData.serial_number}
-                      onChange={(e) => setElectricFormData({ ...electricFormData, serial_number: e.target.value })}
-                      className="form-input"
-                      required
-                    />
-                  </div>
-                  
-                  <div className="form-group">
-                    <label className="form-label">Location</label>
-                    <input
-                      type="text"
-                      value={electricFormData.location}
-                      onChange={(e) => setElectricFormData({ ...electricFormData, location: e.target.value })}
-                      className="form-input"
-                      placeholder="e.g., Main electrical room"
-                    />
-                  </div>
-                  
-                  <div className="form-group">
-                    <label className="form-label">Installation Date</label>
-                    <input
-                      type="date"
-                      value={electricFormData.installation_date}
-                      onChange={(e) => setElectricFormData({ ...electricFormData, installation_date: e.target.value })}
-                      className="form-input"
-                      required
-                    />
-                  </div>
-                  
-                  <div className="form-group">
-                    <label className="form-label">Status</label>
-                    <select
-                      value={electricFormData.status}
-                      onChange={(e) => setElectricFormData({ ...electricFormData, status: e.target.value })}
-                      className="form-input"
-                    >
-                      <option value="active">Active</option>
-                      <option value="inactive">Inactive</option>
-                      <option value="broken">Broken</option>
-                    </select>
-                  </div>
-                </div>
-                
-                <div className="modal-footer">
-                  <button
-                    type="button"
-                    onClick={() => setShowCreateModal(false)}
-                    className="btn btn-secondary"
-                  >
-                    Cancel
-                  </button>
-                  <button type="submit" className="btn btn-primary">
-                    Add Electric Meter
-                  </button>
-                </div>
-              </form>
-            )}
-
-            {activeTab === 'gas' && (
-              <form onSubmit={handleGasSubmit}>
-                <div className="modal-body">
-                  <div className="form-group">
-                    <label className="form-label">Facility</label>
-                    <select
-                      value={gasFormData.facility_id}
-                      onChange={(e) => setGasFormData({ ...gasFormData, facility_id: e.target.value })}
-                      className="form-input"
-                      required
-                    >
-                      <option value="">Select a facility</option>
-                      {facilities.map((facility) => (
-                        <option key={facility.id} value={facility.id}>
-                          {facility.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  <div className="form-group">
-                    <label className="form-label">Serial Number</label>
-                    <input
-                      type="text"
-                      value={gasFormData.serial_number}
-                      onChange={(e) => setGasFormData({ ...gasFormData, serial_number: e.target.value })}
-                      className="form-input"
-                      required
-                    />
-                  </div>
-                  
-                  <div className="form-group">
-                    <label className="form-label">Gas Type</label>
-                    <select
-                      value={gasFormData.gas_type}
-                      onChange={(e) => setGasFormData({ ...gasFormData, gas_type: e.target.value })}
-                      className="form-input"
-                    >
-                      <option value="natural">Natural Gas</option>
-                      <option value="propane">Propane</option>
-                      <option value="butane">Butane</option>
-                    </select>
-                  </div>
-                  
-                  <div className="form-group">
-                    <label className="form-label">Location</label>
-                    <input
-                      type="text"
-                      value={gasFormData.location}
-                      onChange={(e) => setGasFormData({ ...gasFormData, location: e.target.value })}
-                      className="form-input"
-                      placeholder="e.g., Basement utility room"
-                    />
-                  </div>
-                  
-                  <div className="form-group">
-                    <label className="form-label">Installation Date</label>
-                    <input
-                      type="date"
-                      value={gasFormData.installation_date}
-                      onChange={(e) => setGasFormData({ ...gasFormData, installation_date: e.target.value })}
-                      className="form-input"
-                      required
-                    />
-                  </div>
-                  
-                  <div className="form-group">
-                    <label className="form-label">Status</label>
-                    <select
-                      value={gasFormData.status}
-                      onChange={(e) => setGasFormData({ ...gasFormData, status: e.target.value })}
-                      className="form-input"
-                    >
-                      <option value="active">Active</option>
-                      <option value="inactive">Inactive</option>
-                      <option value="broken">Broken</option>
-                    </select>
-                  </div>
-                </div>
-                
-                <div className="modal-footer">
-                  <button
-                    type="button"
-                    onClick={() => setShowCreateModal(false)}
-                    className="btn btn-secondary"
-                  >
-                    Cancel
-                  </button>
-                  <button type="submit" className="btn btn-primary">
-                    Add Gas Meter
-                  </button>
-                </div>
-              </form>
-            )}
-
-            {activeTab === 'heating' && (
-              <form onSubmit={handleHeatingSubmit}>
-                <div className="modal-body">
-                  <div className="form-group">
-                    <label className="form-label">Facility</label>
-                    <select
-                      value={heatingFormData.facility_id}
-                      onChange={(e) => setHeatingFormData({ ...heatingFormData, facility_id: e.target.value })}
-                      className="form-input"
-                      required
-                    >
-                      <option value="">Select a facility</option>
-                      {facilities.map((facility) => (
-                        <option key={facility.id} value={facility.id}>
-                          {facility.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  <div className="form-group">
-                    <label className="form-label">Serial Number</label>
-                    <input
-                      type="text"
-                      value={heatingFormData.serial_number}
-                      onChange={(e) => setHeatingFormData({ ...heatingFormData, serial_number: e.target.value })}
-                      className="form-input"
-                      required
-                    />
-                  </div>
-                  
-                  <div className="form-group">
-                    <label className="form-label">Heating Type</label>
-                    <select
-                      value={heatingFormData.heating_type}
-                      onChange={(e) => setHeatingFormData({ ...heatingFormData, heating_type: e.target.value })}
-                      className="form-input"
-                    >
-                      <option value="boiler">Boiler</option>
-                      <option value="heat_pump">Heat Pump</option>
-                      <option value="furnace">Furnace</option>
-                      <option value="radiator">Radiator</option>
-                    </select>
-                  </div>
-                  
-                  <div className="form-group">
-                    <label className="form-label">Location</label>
-                    <input
-                      type="text"
-                      value={heatingFormData.location}
-                      onChange={(e) => setHeatingFormData({ ...heatingFormData, location: e.target.value })}
-                      className="form-input"
-                      placeholder="e.g., Basement boiler room"
-                    />
-                  </div>
-                  
-                  <div className="form-group">
-                    <label className="form-label">Installation Date</label>
-                    <input
-                      type="date"
-                      value={heatingFormData.installation_date}
-                      onChange={(e) => setHeatingFormData({ ...heatingFormData, installation_date: e.target.value })}
-                      className="form-input"
-                      required
-                    />
-                  </div>
-                  
-                  <div className="form-group">
-                    <label className="form-label">Status</label>
-                    <select
-                      value={heatingFormData.status}
-                      onChange={(e) => setHeatingFormData({ ...heatingFormData, status: e.target.value })}
-                      className="form-input"
-                    >
-                      <option value="active">Active</option>
-                      <option value="inactive">Inactive</option>
-                      <option value="broken">Broken</option>
-                    </select>
-                  </div>
-                </div>
-                
-                <div className="modal-footer">
-                  <button
-                    type="button"
-                    onClick={() => setShowCreateModal(false)}
-                    className="btn btn-secondary"
-                  >
-                    Cancel
-                  </button>
-                  <button type="submit" className="btn btn-primary">
-                    Add Heating Meter
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Create/Edit Modal */}
+      <MeterForm
+        isOpen={showCreateModal || showEditModal}
+        onClose={() => {
+          setShowCreateModal(false);
+          setShowEditModal(false);
+          setEditingMeter(null);
+        }}
+        meterType={activeTab}
+        isEditing={showEditModal}
+        editingMeter={editingMeter}
+        formData={formData}
+        onFormDataChange={handleFormDataChange}
+        facilities={facilities}
+        onSubmit={showEditModal ? handleEditSubmit : (activeTab === 'electric' ? handleElectricSubmit : activeTab === 'gas' ? handleGasSubmit : handleHeatingSubmit)}
+      />
 
       {/* Edit Modal */}
       {showEditModal && editingMeter && (
@@ -1173,290 +724,21 @@ const Meters = () => {
               </button>
             </div>
             
-            {activeTab === 'electric' && (
-              <form onSubmit={handleEditSubmit}>
-                <div className="modal-body">
-                  <div className="form-group">
-                    <label className="form-label">Facility</label>
-                    <select
-                      value={electricFormData.facility_id}
-                      onChange={(e) => setElectricFormData({ ...electricFormData, facility_id: e.target.value })}
-                      className="form-input"
-                      required
-                    >
-                      <option value="">Select a facility</option>
-                      {facilities.map(facility => (
-                        <option key={facility.id} value={facility.id}>
-                          {facility.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  <div className="form-group">
-                    <label className="form-label">Serial Number</label>
-                    <input
-                      type="text"
-                      value={electricFormData.serial_number}
-                      onChange={(e) => setElectricFormData({ ...electricFormData, serial_number: e.target.value })}
-                      className="form-input"
-                      placeholder="Enter serial number"
-                      required
-                    />
-                  </div>
-                  
-                  <div className="form-group">
-                    <label className="form-label">Location</label>
-                    <input
-                      type="text"
-                      value={electricFormData.location}
-                      onChange={(e) => setElectricFormData({ ...electricFormData, location: e.target.value })}
-                      className="form-input"
-                      placeholder="e.g., Main electrical room"
-                    />
-                  </div>
-                  
-                  <div className="form-group">
-                    <label className="form-label">Installation Date</label>
-                    <input
-                      type="date"
-                      value={electricFormData.installation_date}
-                      onChange={(e) => setElectricFormData({ ...electricFormData, installation_date: e.target.value })}
-                      className="form-input"
-                      required
-                    />
-                  </div>
-                  
-                  <div className="form-group">
-                    <label className="form-label">Status</label>
-                    <select
-                      value={electricFormData.status}
-                      onChange={(e) => setElectricFormData({ ...electricFormData, status: e.target.value })}
-                      className="form-input"
-                    >
-                      <option value="active">Active</option>
-                      <option value="inactive">Inactive</option>
-                      <option value="broken">Broken</option>
-                    </select>
-                  </div>
-                </div>
-                
-                <div className="modal-footer">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowEditModal(false);
-                      setEditingMeter(null);
-                    }}
-                    className="btn btn-secondary"
-                  >
-                    Cancel
-                  </button>
-                  <button type="submit" className="btn btn-primary">
-                    Update Electric Meter
-                  </button>
-                </div>
-              </form>
-            )}
+            <MeterForm
+              type={activeTab}
+              facilities={facilities}
+              onSubmit={handleEditSubmit}
+              onCancel={() => {
+                setShowEditModal(false);
+                setEditingMeter(null);
+              }}
+              initialData={editingMeter}
+              isEdit={true}
+            />
             
-            {activeTab === 'gas' && (
-              <form onSubmit={handleEditSubmit}>
-                <div className="modal-body">
-                  <div className="form-group">
-                    <label className="form-label">Facility</label>
-                    <select
-                      value={gasFormData.facility_id}
-                      onChange={(e) => setGasFormData({ ...gasFormData, facility_id: e.target.value })}
-                      className="form-input"
-                      required
-                    >
-                      <option value="">Select a facility</option>
-                      {facilities.map(facility => (
-                        <option key={facility.id} value={facility.id}>
-                          {facility.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  <div className="form-group">
-                    <label className="form-label">Serial Number</label>
-                    <input
-                      type="text"
-                      value={gasFormData.serial_number}
-                      onChange={(e) => setGasFormData({ ...gasFormData, serial_number: e.target.value })}
-                      className="form-input"
-                      placeholder="Enter serial number"
-                      required
-                    />
-                  </div>
-                  
-                  <div className="form-group">
-                    <label className="form-label">Gas Type</label>
-                    <select
-                      value={gasFormData.gas_type}
-                      onChange={(e) => setGasFormData({ ...gasFormData, gas_type: e.target.value })}
-                      className="form-input"
-                    >
-                      <option value="natural">Natural Gas</option>
-                      <option value="propane">Propane</option>
-                      <option value="butane">Butane</option>
-                    </select>
-                  </div>
-                  
-                  <div className="form-group">
-                    <label className="form-label">Location</label>
-                    <input
-                      type="text"
-                      value={gasFormData.location}
-                      onChange={(e) => setGasFormData({ ...gasFormData, location: e.target.value })}
-                      className="form-input"
-                      placeholder="e.g., Kitchen, Basement"
-                    />
-                  </div>
-                  
-                  <div className="form-group">
-                    <label className="form-label">Installation Date</label>
-                    <input
-                      type="date"
-                      value={gasFormData.installation_date}
-                      onChange={(e) => setGasFormData({ ...gasFormData, installation_date: e.target.value })}
-                      className="form-input"
-                      required
-                    />
-                  </div>
-                  
-                  <div className="form-group">
-                    <label className="form-label">Status</label>
-                    <select
-                      value={gasFormData.status}
-                      onChange={(e) => setGasFormData({ ...gasFormData, status: e.target.value })}
-                      className="form-input"
-                    >
-                      <option value="active">Active</option>
-                      <option value="inactive">Inactive</option>
-                      <option value="broken">Broken</option>
-                    </select>
-                  </div>
-                </div>
-                
-                <div className="modal-footer">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowEditModal(false);
-                      setEditingMeter(null);
-                    }}
-                    className="btn btn-secondary"
-                  >
-                    Cancel
-                  </button>
-                  <button type="submit" className="btn btn-primary">
-                    Update Gas Meter
-                  </button>
-                </div>
-              </form>
-            )}
+
             
-            {activeTab === 'heating' && (
-              <form onSubmit={handleEditSubmit}>
-                <div className="modal-body">
-                  <div className="form-group">
-                    <label className="form-label">Facility</label>
-                    <select
-                      value={heatingFormData.facility_id}
-                      onChange={(e) => setHeatingFormData({ ...heatingFormData, facility_id: e.target.value })}
-                      className="form-input"
-                      required
-                    >
-                      <option value="">Select a facility</option>
-                      {facilities.map(facility => (
-                        <option key={facility.id} value={facility.id}>
-                          {facility.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  <div className="form-group">
-                    <label className="form-label">Serial Number</label>
-                    <input
-                      type="text"
-                      value={heatingFormData.serial_number}
-                      onChange={(e) => setHeatingFormData({ ...heatingFormData, serial_number: e.target.value })}
-                      className="form-input"
-                      placeholder="Enter serial number"
-                      required
-                    />
-                  </div>
-                  
-                  <div className="form-group">
-                    <label className="form-label">Heating Type</label>
-                    <select
-                      value={heatingFormData.heating_type}
-                      onChange={(e) => setHeatingFormData({ ...heatingFormData, heating_type: e.target.value })}
-                      className="form-input"
-                    >
-                      <option value="boiler">Boiler</option>
-                      <option value="heat_pump">Heat Pump</option>
-                      <option value="furnace">Furnace</option>
-                      <option value="radiator">Radiator</option>
-                    </select>
-                  </div>
-                  
-                  <div className="form-group">
-                    <label className="form-label">Location</label>
-                    <input
-                      type="text"
-                      value={heatingFormData.location}
-                      onChange={(e) => setHeatingFormData({ ...heatingFormData, location: e.target.value })}
-                      className="form-input"
-                      placeholder="e.g., Basement boiler room"
-                    />
-                  </div>
-                  
-                  <div className="form-group">
-                    <label className="form-label">Installation Date</label>
-                    <input
-                      type="date"
-                      value={heatingFormData.installation_date}
-                      onChange={(e) => setHeatingFormData({ ...heatingFormData, installation_date: e.target.value })}
-                      className="form-input"
-                      required
-                    />
-                  </div>
-                  
-                  <div className="form-group">
-                    <label className="form-label">Status</label>
-                    <select
-                      value={heatingFormData.status}
-                      onChange={(e) => setHeatingFormData({ ...heatingFormData, status: e.target.value })}
-                      className="form-input"
-                    >
-                      <option value="active">Active</option>
-                      <option value="inactive">Inactive</option>
-                      <option value="broken">Broken</option>
-                    </select>
-                  </div>
-                </div>
-                
-                <div className="modal-footer">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowEditModal(false);
-                      setEditingMeter(null);
-                    }}
-                    className="btn btn-secondary"
-                  >
-                    Cancel
-                  </button>
-                  <button type="submit" className="btn btn-primary">
-                    Update Heating System
-                  </button>
-                </div>
-              </form>
-            )}
+
           </div>
         </div>
       )}

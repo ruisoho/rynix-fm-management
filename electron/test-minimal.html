@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            margin: 0;
+            padding: 40px;
+            text-align: center;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 20px;
+        }
+        .status {
+            background: rgba(255,255,255,0.2);
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        .button {
+            background: rgba(255,255,255,0.3);
+            border: none;
+            padding: 15px 30px;
+            color: white;
+            font-size: 1.1rem;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 10px;
+        }
+        .button:hover {
+            background: rgba(255,255,255,0.4);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏢 Facility Manager</h1>
+        <div class="status">
+            <h2>✅ Dashboard Loaded Successfully!</h2>
+            <p>The Electron app is working properly.</p>
+        </div>
+        
+        <div class="status">
+            <h3>System Status</h3>
+            <p>Database: <strong>Connected</strong></p>
+            <p>Application: <strong>Running</strong></p>
+            <p>Time: <span id="time"></span></p>
+        </div>
+        
+        <button class="button" onclick="showAlert()">Test Button</button>
+        <button class="button" onclick="updateTime()">Update Time</button>
+    </div>
+    
+    <script>
+        function showAlert() {
+            alert('Button clicked! The dashboard is working.');
+        }
+        
+        function updateTime() {
+            document.getElementById('time').textContent = new Date().toLocaleTimeString();
+        }
+        
+        // Update time every second
+        setInterval(updateTime, 1000);
+        updateTime();
+        
+        console.log('✅ Minimal dashboard loaded and running!');
+    </script>
+</body>
+</html>
